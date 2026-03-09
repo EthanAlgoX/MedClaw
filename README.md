@@ -61,7 +61,7 @@ medclaw agent
 
 ## Architecture
 
-MedClaw follows a skill-first architecture inspired by MarketBot:
+MedClaw follows a skill-first architecture:
 
 1. **Runtime**: Message processing, session management
 2. **Skills**: Task-specific capabilities (SKILL.md)
