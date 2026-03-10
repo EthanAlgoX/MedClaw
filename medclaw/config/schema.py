@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProviderConfig(BaseModel):
@@ -81,11 +81,10 @@ class WorkspaceConfig(BaseModel):
 class MedClawConfig(BaseModel):
     """Main MedClaw configuration."""
 
+    model_config = ConfigDict(extra="allow")
+
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
-
-    class Config:
-        extra = "allow"

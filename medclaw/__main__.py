@@ -31,17 +31,17 @@ console = Console()
 def get_provider(config):
     """Get the LLM provider based on configuration."""
     provider_name = config.agents.defaults.provider
-    
+
     if provider_name == "deepseek":
         provider_config = config.providers.deepseek
         if provider_config and provider_config.apiKey:
             return DeepSeekProvider(api_key=provider_config.apiKey)
-    
+
     if provider_name == "openrouter":
         provider_config = config.providers.openrouter
         if provider_config and provider_config.apiKey:
             return OpenRouterProvider(api_key=provider_config.apiKey)
-    
+
     raise ValueError(f"Provider {provider_name} not configured or not available")
 
 
@@ -168,7 +168,16 @@ def skills(search: str | None = None):
         results = loader.search_local_skills(search)
         console.print(f"[bold]Search results for '{search}':[/bold]")
         for r in results:
-            console.print(f"  - {r['name']}: {r.get('description', '')}")
+            description = r.get("description", "")
+            source = r.get("source", "unknown")
+            reasons = r.get("reasons", "")
+            score = r.get("relevance_score")
+            suffix = f" [{source}]"
+            if score:
+                suffix += f" score={score}"
+            console.print(f"  - {r['name']}{suffix}: {description}")
+            if reasons:
+                console.print(f"      reasons: {reasons}")
     else:
         all_skills = loader.list_skills(filter_unavailable=False)
         console.print(f"[bold]Available Skills ({len(all_skills)}):[/bold]")

@@ -38,6 +38,10 @@ class ContextBuilder:
         ]
 
         if skills:
+            prompt_parts.append("")
+            prompt_parts.append(
+                "The following skills were auto-selected for this request based on the user's topic."
+            )
             skills_content = self.skills_loader.load_skills_for_context(skills)
             if skills_content:
                 prompt_parts.append("\n## Relevant Skills\n")
@@ -52,11 +56,14 @@ class ContextBuilder:
         skills: list[str] | None = None,
     ) -> dict[str, Any]:
         """Build complete context for a conversation turn."""
+        selected_skills = skills or self.skills_loader.match_skills_for_request(user_message)
         context = {
-            "system": self.build_system_prompt(skills),
+            "system": self.build_system_prompt(selected_skills or None),
             "history": history or [],
             "user_message": user_message,
         }
+        if selected_skills:
+            context["selected_skills"] = selected_skills
 
         if self.memory_layer != "L0":
             relevant_memories = self.memory_store.retrieve(user_message, limit=5)

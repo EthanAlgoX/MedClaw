@@ -1,1 +1,0 @@
-"""MedClaw medical domain package."""

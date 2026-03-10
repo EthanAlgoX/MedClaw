@@ -3,28 +3,60 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import shutil
-import time
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 
 BUILTIN_SKILLS_DIR = Path(__file__).parent.parent / "skills"
-_EXTERNAL_CATALOG_CACHE_TTL_S = 60 * 60 * 6
 
 
 class SkillsLoader:
-    """Loader for agent skills.
+    """Load, summarize, and rank MedClaw skills."""
 
-    Skills are markdown files (SKILL.md) that teach the agent how to use
-    specific tools or perform certain medical tasks.
-    """
-
-    _external_catalog_cache: tuple[float, list[dict[str, str]]] | None = None
+    _STOPWORDS = {
+        "a",
+        "an",
+        "and",
+        "api",
+        "assistant",
+        "based",
+        "bio",
+        "case",
+        "clinical",
+        "data",
+        "database",
+        "design",
+        "for",
+        "from",
+        "guide",
+        "guidance",
+        "how",
+        "in",
+        "integration",
+        "into",
+        "medical",
+        "of",
+        "on",
+        "or",
+        "pipeline",
+        "report",
+        "research",
+        "review",
+        "search",
+        "skill",
+        "study",
+        "system",
+        "the",
+        "tool",
+        "tools",
+        "use",
+        "using",
+        "via",
+        "workflow",
+        "workflows",
+        "write",
+    }
 
     def __init__(self, workspace: Path, builtin_skills_dir: Path | None = None):
         self.workspace = workspace
@@ -34,41 +66,41 @@ class SkillsLoader:
     def list_skills(
         self,
         filter_unavailable: bool = True,
-        available_tools: set[str] | None = None
+        available_tools: set[str] | None = None,
     ) -> list[dict[str, str]]:
-        """List all available skills."""
-        skills = []
+        """List all available skills, preferring workspace overrides."""
+        skills_by_name: dict[str, dict[str, str]] = {}
 
-        if self.workspace_skills.exists():
-            for skill_dir in self.workspace_skills.iterdir():
-                if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists():
-                        skills.append({
-                            "name": skill_dir.name,
-                            "path": str(skill_file),
-                            "source": "workspace"
-                        })
+        def collect(root: Path, source: str) -> None:
+            if not root.exists():
+                return
+            for skill_dir in sorted(root.iterdir(), key=lambda item: item.name):
+                if not skill_dir.is_dir():
+                    continue
+                skill_file = skill_dir / "SKILL.md"
+                if not skill_file.exists():
+                    continue
+                skills_by_name.setdefault(
+                    skill_dir.name,
+                    {
+                        "name": skill_dir.name,
+                        "path": str(skill_file),
+                        "source": source,
+                    },
+                )
 
-        if self.builtin_skills and self.builtin_skills.exists():
-            for skill_dir in self.builtin_skills.iterdir():
-                if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists() and not any(
-                        s["name"] == skill_dir.name for s in skills
-                    ):
-                        skills.append({
-                            "name": skill_dir.name,
-                            "path": str(skill_file),
-                            "source": "builtin"
-                        })
+        collect(self.workspace_skills, "workspace")
+        if self.builtin_skills:
+            collect(self.builtin_skills, "builtin")
 
+        skills = list(skills_by_name.values())
         if filter_unavailable:
             return [
-                s for s in skills
+                skill
+                for skill in skills
                 if self._has_required_tools(
-                    self.get_skill_capabilities(s["name"]),
-                    available_tools
+                    self.get_skill_capabilities(skill["name"]),
+                    available_tools,
                 )
             ]
         return skills
@@ -87,51 +119,63 @@ class SkillsLoader:
         return None
 
     def load_skills_for_context(self, skill_names: list[str]) -> str:
-        """Load specific skills for inclusion in agent context."""
+        """Load selected skills into a bounded prompt section."""
         parts = []
+        seen: set[str] = set()
+
         for name in skill_names:
+            if name in seen:
+                continue
+            seen.add(name)
+
             content = self.load_skill(name)
-            if content:
-                content = self._strip_frontmatter(content)
-                parts.append(f"### Skill: {name}\n\n{content}")
+            if not content:
+                continue
+
+            content = self._strip_frontmatter(content)
+            if len(content) > 3000:
+                content = f"{content[:3000].rstrip()}\n\n[... skill content truncated ...]"
+            parts.append(f"### Skill: {name}\n\n{content}")
 
         return "\n\n---\n\n".join(parts) if parts else ""
 
     def build_skills_summary(
         self,
-        available_tools: set[str] | None = None
+        available_tools: set[str] | None = None,
     ) -> str:
-        """Build a summary of all skills."""
+        """Build an XML summary of all skills."""
         all_skills = self.list_skills(
             filter_unavailable=False,
-            available_tools=available_tools
+            available_tools=available_tools,
         )
         if not all_skills:
             return ""
 
-        def escape_xml(s: str) -> str:
-            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        def escape_xml(text: str) -> str:
+            return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
         lines = ["<skills>"]
-        for s in all_skills:
-            name = escape_xml(s["name"])
-            path = s["path"]
-            desc = escape_xml(self._get_skill_description(s["name"]))
-            capabilities = self.get_skill_capabilities(s["name"])
+        for skill in all_skills:
+            name = escape_xml(skill["name"])
+            path = skill["path"]
+            description = escape_xml(self._get_skill_description(skill["name"]))
+            capabilities = self.get_skill_capabilities(skill["name"])
 
-            lines.append(f'  <skill available="true">')
+            lines.append('  <skill available="true">')
             lines.append(f"    <name>{name}</name>")
-            lines.append(f"    <description>{desc}</description>")
+            lines.append(f"    <description>{description}</description>")
             lines.append(f"    <location>{path}</location>")
+            lines.append(f"    <source>{escape_xml(skill['source'])}</source>")
 
             if capabilities.get("triggers"):
-                lines.append(
-                    f"    <triggers>{escape_xml(', '.join(capabilities['triggers']))}</triggers>"
-                )
+                trigger_text = escape_xml(", ".join(capabilities["triggers"]))
+                lines.append(f"    <triggers>{trigger_text}</triggers>")
             if capabilities.get("tools"):
-                lines.append(
-                    f"    <tools>{escape_xml(', '.join(capabilities['tools']))}</tools>"
-                )
+                tool_text = escape_xml(", ".join(capabilities["tools"]))
+                lines.append(f"    <tools>{tool_text}</tools>")
+            if capabilities.get("allowed_tools"):
+                allowed_tools_text = escape_xml(", ".join(capabilities["allowed_tools"]))
+                lines.append(f"    <allowed_tools>{allowed_tools_text}</allowed_tools>")
 
             lines.append("  </skill>")
 
@@ -140,66 +184,91 @@ class SkillsLoader:
 
     def _get_skill_description(self, name: str) -> str:
         """Get the description of a skill from its frontmatter."""
-        meta = self.get_skill_metadata(name)
-        if meta and meta.get("description"):
-            return meta["description"]
+        metadata = self.get_skill_metadata(name)
+        if metadata:
+            if metadata.get("description"):
+                return str(metadata["description"])
+            nested_metadata = metadata.get("metadata")
+            if isinstance(nested_metadata, dict) and nested_metadata.get("description"):
+                return str(nested_metadata["description"])
         return name
 
     def _strip_frontmatter(self, content: str) -> str:
         """Remove YAML frontmatter from markdown content."""
-        if content.startswith("---"):
-            match = re.match(r"^---\n.*?\n---\n", content, re.DOTALL)
-            if match:
-                return content[match.end():].strip()
-        return content
+        _, body = self._extract_frontmatter(content)
+        return body.strip()
 
-    def _parse_medclaw_metadata(self, raw: str) -> dict:
-        """Parse skill metadata from frontmatter."""
+    def _parse_medclaw_metadata(self, raw: str) -> dict[str, Any]:
+        """Parse MedClaw-specific metadata from frontmatter."""
         if isinstance(raw, dict):
-            return raw.get("medclaw", raw) if isinstance(raw, dict) else {}
+            return raw.get("medclaw", raw)
         try:
             data = json.loads(raw)
-            return data.get("medclaw", {}) if isinstance(data, dict) else {}
         except (json.JSONDecodeError, TypeError):
             return {}
+        return data.get("medclaw", {}) if isinstance(data, dict) else {}
 
-    def get_skill_capabilities(self, name: str) -> dict:
+    def get_skill_capabilities(self, name: str) -> dict[str, Any]:
         """Get normalized capability metadata used for routing."""
-        meta = self._get_skill_meta(name)
+        frontmatter = self.get_skill_metadata(name) or {}
+        medclaw_meta = self._get_skill_meta(name)
+        derived_triggers = self._derive_triggers(name, frontmatter)
+        allowed_tools = self._normalize_metadata_list(
+            frontmatter.get("allowed-tools") or frontmatter.get("allowed_tools")
+        )
+        tools = self._normalize_metadata_list(medclaw_meta.get("tools", [])) or allowed_tools
+
         return {
-            "triggers": self._normalize_metadata_list(meta.get("triggers", [])),
-            "output": meta.get("output"),
-            "risk": meta.get("risk"),
-            "freshness": meta.get("freshness"),
-            "tools": self._normalize_metadata_list(meta.get("tools", [])),
-            "required_tools": self._normalize_metadata_list(meta.get("required_tools", [])),
-            "domains": self._normalize_metadata_list(meta.get("domains", [])),
+            "triggers": self._normalize_metadata_list(medclaw_meta.get("triggers", []))
+            or derived_triggers,
+            "output": medclaw_meta.get("output"),
+            "risk": medclaw_meta.get("risk"),
+            "freshness": medclaw_meta.get("freshness"),
+            "tools": tools,
+            "required_tools": self._normalize_metadata_list(
+                medclaw_meta.get("required_tools", [])
+            ),
+            "domains": self._normalize_metadata_list(medclaw_meta.get("domains", [])),
+            "allowed_tools": allowed_tools,
         }
 
-    def _get_skill_meta(self, name: str) -> dict:
-        """Get medclaw metadata for a skill."""
-        meta = self.get_skill_metadata(name) or {}
-        return self._parse_medclaw_metadata(meta.get("metadata", ""))
+    def _get_skill_meta(self, name: str) -> dict[str, Any]:
+        """Get MedClaw metadata for a skill."""
+        metadata = self.get_skill_metadata(name) or {}
+        return self._parse_medclaw_metadata(metadata.get("metadata", ""))
 
     @staticmethod
     def _normalize_metadata_list(value: Any) -> list[str]:
         """Normalize metadata into a stable list of strings."""
         if value is None:
             return []
+
         if isinstance(value, str):
-            value = [value]
+            parsed = SkillsLoader._parse_frontmatter_value(value)
+            if isinstance(parsed, list):
+                value = parsed
+            elif "," in value:
+                value = [item.strip() for item in value.split(",")]
+            else:
+                value = [value]
+
+        if isinstance(value, tuple | set):
+            value = list(value)
+
         if not isinstance(value, list):
             return []
+
         return [str(item).strip() for item in value if str(item).strip()]
 
     @staticmethod
     def _has_required_tools(
-        capabilities: dict,
-        available_tools: set[str] | None
+        capabilities: dict[str, Any],
+        available_tools: set[str] | None,
     ) -> bool:
-        """Return True when runtime tool availability satisfies required_tools."""
+        """Return True when runtime tool availability satisfies required tools."""
         if available_tools is None:
             return True
+
         required = {
             str(name).strip()
             for name in capabilities.get("required_tools", [])
@@ -212,18 +281,15 @@ class SkillsLoader:
         text: str,
         available_tools: set[str] | None = None,
     ) -> list[str]:
-        """Return skills whose trigger metadata matches the given text."""
-        lowered = text.lower()
-        matched = []
-        for item in self.list_skills(
-            filter_unavailable=True,
-            available_tools=available_tools
-        ):
-            capabilities = self.get_skill_capabilities(item["name"])
-            triggers = [str(trigger).lower() for trigger in capabilities.get("triggers", [])]
-            if any(trigger and trigger in lowered for trigger in triggers):
-                matched.append(item["name"])
-        return matched
+        """Return the most relevant skills for a user request."""
+        return [
+            skill["name"]
+            for skill in self.suggest_skills_for_request(
+                text,
+                limit=3,
+                available_tools=available_tools,
+            )
+        ]
 
     def search_local_skills(
         self,
@@ -231,59 +297,118 @@ class SkillsLoader:
         limit: int = 5,
         available_tools: set[str] | None = None,
     ) -> list[dict[str, str]]:
-        """Search local/workspace skills by name and description."""
-        lowered = text.lower()
-        tokens = {
-            token
-            for token in re.findall(r"[a-z0-9\u4e00-\u9fff]+", lowered)
-            if len(token) >= 2
-        }
-        ranked = []
-        for item in self.list_skills(
-            filter_unavailable=False,
-            available_tools=available_tools
+        """Search local skills by name, description, and derived keywords."""
+        return self.suggest_skills_for_request(
+            text,
+            limit=limit,
+            available_tools=available_tools,
+        )
+
+    def suggest_skills_for_request(
+        self,
+        text: str,
+        limit: int = 5,
+        available_tools: set[str] | None = None,
+    ) -> list[dict[str, str]]:
+        """Rank skills for a request using names, frontmatter, and descriptions."""
+        query = text.lower().strip()
+        if not query:
+            return []
+
+        query_tokens = self._keyword_tokens(query, min_len=2)
+        ranked: list[tuple[float, dict[str, str]]] = []
+
+        for skill in self.list_skills(
+            filter_unavailable=True,
+            available_tools=available_tools,
         ):
-            description = self._get_skill_description(item["name"])
-            haystack = f"{item['name']} {description}".lower()
-            score = 0
-            if item["name"].replace("-", " ") in lowered:
-                score += 8
-            for token in tokens:
-                if token in haystack:
-                    score += 2
+            description = self._get_skill_description(skill["name"])
+            capabilities = self.get_skill_capabilities(skill["name"])
+            score, reasons = self._score_skill_match(
+                query=query,
+                query_tokens=query_tokens,
+                name=skill["name"],
+                description=description,
+                triggers=capabilities.get("triggers", []),
+            )
             if score <= 0:
                 continue
-            ranked.append((score, {**item, "description": description}))
 
-        ranked.sort(key=lambda row: (-row[0], row[1]["name"]))
-        return [entry for _, entry in ranked[:limit]]
+            if skill["source"] == "workspace":
+                score += 5
 
-    def get_skill_metadata(self, name: str) -> dict | None:
+            ranked.append(
+                (
+                    score,
+                    {
+                        **skill,
+                        "description": description,
+                        "relevance_score": f"{score:.1f}",
+                        "reasons": ", ".join(reasons[:3]),
+                    },
+                )
+            )
+
+        ranked.sort(key=lambda item: (-item[0], item[1]["name"]))
+        return [item for _, item in ranked[:limit]]
+
+    def get_skill_metadata(self, name: str) -> dict[str, Any] | None:
         """Get metadata from a skill's frontmatter."""
         content = self.load_skill(name)
         if not content:
             return None
 
-        if content.startswith("---"):
-            match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-            if match:
-                return self._parse_frontmatter(match.group(1))
-
-        return None
+        frontmatter, _ = self._extract_frontmatter(content)
+        return frontmatter
 
     @staticmethod
-    def _parse_frontmatter(raw: str) -> dict:
-        """Parse simple frontmatter with JSON-friendly values."""
-        metadata = {}
-        for line in raw.split("\n"):
-            if ":" not in line:
+    def _extract_frontmatter(content: str) -> tuple[dict[str, Any] | None, str]:
+        """Split markdown frontmatter from the body."""
+        if not content.startswith("---"):
+            return None, content
+
+        match = re.match(r"^---\n(.*?)\n---\n?", content, re.DOTALL)
+        if not match:
+            return None, content
+
+        return SkillsLoader._parse_frontmatter(match.group(1)), content[match.end():]
+
+    @staticmethod
+    def _parse_frontmatter(raw: str) -> dict[str, Any]:
+        """Parse simple YAML-like frontmatter values."""
+        metadata: dict[str, Any] = {}
+        current_list_key: str | None = None
+
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
                 continue
+
+            if stripped.startswith("- ") and current_list_key:
+                metadata.setdefault(current_list_key, []).append(
+                    SkillsLoader._parse_frontmatter_value(stripped[2:].strip())
+                )
+                continue
+
+            if ":" not in line:
+                current_list_key = None
+                continue
+
             key, value = line.split(":", 1)
             key = key.strip()
-            text = value.strip()
+            value = value.strip()
             if not key:
+                current_list_key = None
                 continue
-            metadata[key] = SkillsLoader._parse_frontmatter_value(text)
+
+            if not value:
+                metadata[key] = []
+                current_list_key = key
+                continue
+
+            metadata[key] = SkillsLoader._parse_frontmatter_value(value)
+            current_list_key = None
+
         return metadata
 
     @staticmethod
@@ -291,18 +416,29 @@ class SkillsLoader:
         """Parse scalar or JSON-like frontmatter values."""
         if not value:
             return ""
+
         if value[0] in "[{":
             try:
                 return json.loads(value)
             except json.JSONDecodeError:
+                if value.startswith("[") and value.endswith("]"):
+                    inner = value[1:-1].strip()
+                    if not inner:
+                        return []
+                    return [
+                        item.strip().strip('"').strip("'")
+                        for item in inner.split(",")
+                        if item.strip()
+                    ]
                 return value
 
         lowered = value.lower()
         if lowered in {"true", "false"}:
             return lowered == "true"
 
-        if (value.startswith('"') and value.endswith('"')) or \
-           (value.startswith("'") and value.endswith("'")):
+        if (value.startswith('"') and value.endswith('"')) or (
+            value.startswith("'") and value.endswith("'")
+        ):
             return value[1:-1]
 
         try:
@@ -316,3 +452,69 @@ class SkillsLoader:
             pass
 
         return value
+
+    def _derive_triggers(self, name: str, frontmatter: dict[str, Any]) -> list[str]:
+        """Derive fallback triggers from skill name and description."""
+        phrases = [
+            name.lower(),
+            name.lower().replace("-", " "),
+            str(frontmatter.get("name", "")).strip().lower(),
+        ]
+        triggers = [phrase for phrase in phrases if phrase]
+
+        description = str(frontmatter.get("description", ""))
+        for token in self._keyword_tokens(description):
+            if token not in triggers:
+                triggers.append(token)
+
+        return triggers[:12]
+
+    def _score_skill_match(
+        self,
+        query: str,
+        query_tokens: set[str],
+        name: str,
+        description: str,
+        triggers: list[str],
+    ) -> tuple[float, list[str]]:
+        """Score a skill against a user request."""
+        score = 0.0
+        reasons: list[str] = []
+
+        normalized_name = name.lower().replace("-", " ")
+        name_tokens = self._keyword_tokens(name)
+        description_tokens = self._keyword_tokens(description)
+        trigger_phrases = [trigger.lower() for trigger in triggers if trigger]
+
+        if normalized_name and normalized_name in query:
+            score += 10
+            reasons.append("exact name match")
+
+        for trigger in trigger_phrases:
+            if len(trigger) >= 3 and trigger in query:
+                score += 6
+                reasons.append(f"matched trigger '{trigger}'")
+
+        token_hits = query_tokens & name_tokens
+        if token_hits:
+            score += 3 * len(token_hits)
+            reasons.append(f"name tokens: {', '.join(sorted(token_hits)[:3])}")
+
+        description_hits = query_tokens & description_tokens
+        if description_hits:
+            score += 1.5 * len(description_hits)
+            reasons.append(f"description tokens: {', '.join(sorted(description_hits)[:3])}")
+
+        if score < 3:
+            return 0.0, []
+
+        return score, reasons
+
+    @classmethod
+    def _keyword_tokens(cls, text: str, min_len: int = 3) -> set[str]:
+        """Extract useful keyword tokens from free text."""
+        return {
+            token
+            for token in re.findall(r"[a-z0-9\u4e00-\u9fff]+", text.lower())
+            if len(token) >= min_len and token not in cls._STOPWORDS
+        }
