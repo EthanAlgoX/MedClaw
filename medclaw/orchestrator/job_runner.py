@@ -44,3 +44,13 @@ class ResearchOrchestrator:
     def render(self, report: ResearchReport) -> str:
         """Render a workflow report into markdown."""
         return render_research_report(report)
+
+    def list_workflows(self) -> list[dict[str, str]]:
+        """List available workflow ids and titles."""
+        return [
+            {
+                "id": workflow_id,
+                "title": workflow.title,
+            }
+            for workflow_id, workflow in self.workflows.items()
+        ]

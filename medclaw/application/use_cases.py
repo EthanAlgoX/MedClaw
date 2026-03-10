@@ -24,3 +24,17 @@ class MedicalResearchUseCases:
 
         report = await self.orchestrator.run(workflow_id, query, provider)
         return self.orchestrator.render(report)
+
+    async def run_workflow(
+        self,
+        workflow_id: str,
+        query: str,
+        provider: LLMProvider,
+    ) -> str:
+        """Run a specific research workflow."""
+        report = await self.orchestrator.run(workflow_id, query, provider)
+        return self.orchestrator.render(report)
+
+    def list_workflows(self) -> list[dict[str, str]]:
+        """List available typed workflows."""
+        return self.orchestrator.list_workflows()

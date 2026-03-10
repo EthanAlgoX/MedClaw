@@ -13,6 +13,7 @@ from rich.panel import Panel
 
 from medclaw import __version__
 from medclaw.agent.loop import AgentLoop
+from medclaw.application.use_cases import MedicalResearchUseCases
 from medclaw.config.loader import (
     ensure_workspace,
     get_default_config_path,
@@ -25,7 +26,10 @@ from medclaw.providers.openrouter import OpenRouterProvider
 from medclaw.utils.logging import setup_logging
 
 app = typer.Typer(help="MedClaw - AI-powered medical research assistant")
+research_app = typer.Typer(help="Typed medical research workflows")
 console = Console()
+
+app.add_typer(research_app, name="research")
 
 
 def get_provider(config):
@@ -156,6 +160,35 @@ def agent(
             console.print(f"[red]Error:[/red] {e}")
 
 
+def _get_research_use_cases() -> MedicalResearchUseCases:
+    """Create research use cases for the configured workspace."""
+    workspace = get_workspace_path()
+    ensure_workspace(workspace)
+    return MedicalResearchUseCases(workspace)
+
+
+def _get_configured_provider():
+    """Create the configured provider or exit with a readable message."""
+    config = load_config()
+    try:
+        return config, get_provider(config)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {str(e)}")
+        console.print("Run 'medclaw onboard' to set up your configuration")
+        raise typer.Exit(1)
+
+
+async def _run_research_workflow(workflow_id: str, query: str) -> str:
+    """Run a typed research workflow."""
+    use_cases = _get_research_use_cases()
+    _, provider = _get_configured_provider()
+    return await use_cases.run_workflow(
+        workflow_id=workflow_id,
+        query=query,
+        provider=provider,
+    )
+
+
 @app.command()
 def skills(search: str | None = None):
     """List available skills."""
@@ -183,6 +216,51 @@ def skills(search: str | None = None):
         console.print(f"[bold]Available Skills ({len(all_skills)}):[/bold]")
         for s in all_skills:
             console.print(f"  - {s['name']} ({s['source']})")
+
+
+@research_app.command("workflows")
+def research_workflows():
+    """List available typed research workflows."""
+    use_cases = _get_research_use_cases()
+    workflows = use_cases.list_workflows()
+    console.print("[bold]Research Workflows:[/bold]")
+    for workflow in workflows:
+        console.print(f"  - {workflow['id']}: {workflow['title']}")
+
+
+@research_app.command("literature-review")
+def research_literature_review(query: str):
+    """Run the literature review workflow."""
+    response = asyncio.run(_run_research_workflow("literature_review", query))
+    console.print(Markdown(response))
+
+
+@research_app.command("clinical-trial-landscape")
+def research_clinical_trial_landscape(query: str):
+    """Run the clinical trial landscape workflow."""
+    response = asyncio.run(_run_research_workflow("clinical_trial_landscape", query))
+    console.print(Markdown(response))
+
+
+@research_app.command("drug-target-landscape")
+def research_drug_target_landscape(query: str):
+    """Run the drug/target landscape workflow."""
+    response = asyncio.run(_run_research_workflow("drug_target_landscape", query))
+    console.print(Markdown(response))
+
+
+@research_app.command("study-design")
+def research_study_design(query: str):
+    """Run the study design workflow."""
+    response = asyncio.run(_run_research_workflow("study_design", query))
+    console.print(Markdown(response))
+
+
+@research_app.command("evidence-brief")
+def research_evidence_brief(query: str):
+    """Run the evidence brief workflow."""
+    response = asyncio.run(_run_research_workflow("evidence_brief", query))
+    console.print(Markdown(response))
 
 
 def main():

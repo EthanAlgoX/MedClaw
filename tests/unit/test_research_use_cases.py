@@ -57,3 +57,15 @@ def test_use_case_runs_and_saves_report(temp_workspace: Path, monkeypatch):
     assert "Literature Review" in result
     saved_reports = list((temp_workspace / "research" / "reports").glob("*.json"))
     assert saved_reports
+
+
+def test_use_case_lists_workflows(temp_workspace: Path):
+    """Typed workflows should be discoverable from the application layer."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+
+    workflows = use_cases.list_workflows()
+    workflow_ids = {workflow["id"] for workflow in workflows}
+
+    assert "literature_review" in workflow_ids
+    assert "clinical_trial_landscape" in workflow_ids
+    assert "evidence_brief" in workflow_ids
