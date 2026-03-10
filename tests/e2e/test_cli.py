@@ -1,13 +1,47 @@
 """E2E tests for CLI commands."""
 
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport
+from medclaw.evidence.store import EvidenceStore
+
 
 class TestCLI:
     """End-to-end tests for CLI commands."""
+
+    def _seed_report(self, home: Path) -> Path:
+        workspace = home / ".medclaw" / "workspace"
+        store = EvidenceStore(workspace)
+        artifact_paths = store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="KRAS G12C inhibitors",
+                title="KRAS G12C Review",
+                summary="Summary",
+                evidence=[
+                    EvidenceItem(
+                        id="pmid-1",
+                        kind="literature",
+                        source="pubmed",
+                        title="KRAS paper",
+                        citations=[
+                            Citation(
+                                source="pubmed",
+                                title="KRAS paper",
+                                identifier="PMID:1",
+                                url="https://pubmed.ncbi.nlm.nih.gov/1/",
+                            )
+                        ],
+                    )
+                ],
+                metadata={"seeded": True},
+            )
+        )
+        return artifact_paths["report"]
 
     def test_version_command(self):
         """Test version command returns version."""
@@ -113,6 +147,95 @@ class TestCLI:
         assert "--json" in result.stdout
         assert "--save-path" in result.stdout
         assert "--no-llm" in result.stdout
+
+    def test_research_artifacts_command_lists_saved_reports(self, tmp_path, monkeypatch):
+        """Research artifacts command should list stored report records."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        report_path = self._seed_report(test_home)
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert len(payload) == 1
+        assert payload[0]["workflow_id"] == "literature_review"
+        assert payload[0]["filename"] == report_path.name
+
+    def test_research_artifacts_command_supports_search(self, tmp_path, monkeypatch):
+        """Research artifacts command should filter reports by search text."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report(test_home)
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--search", "kras", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert len(payload) == 1
+        assert payload[0]["title"] == "KRAS G12C Review"
+
+    def test_research_show_command_returns_selected_artifact(self, tmp_path, monkeypatch):
+        """Research show command should return requested structured artifact."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        report_path = self._seed_report(test_home)
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "show",
+                report_path.name,
+                "--artifact",
+                "citations",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload[0]["identifier"] == "PMID:1"
+
+    def test_research_show_command_rejects_invalid_artifact(self, tmp_path, monkeypatch):
+        """Research show command should fail cleanly for unsupported artifact names."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        report_path = self._seed_report(test_home)
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "show",
+                report_path.name,
+                "--artifact",
+                "raw",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 1
+        assert "Unsupported artifact" in result.stdout
 
     def test_agent_command_short(self):
         """Test agent command starts and exits quickly."""

@@ -16,6 +16,7 @@ from medclaw import __version__
 from medclaw.agent.loop import AgentLoop
 from medclaw.application.use_cases import MedicalResearchUseCases
 from medclaw.evidence.models import ResearchReport
+from medclaw.evidence.store import EvidenceStore
 from medclaw.config.loader import (
     ensure_workspace,
     get_default_config_path,
@@ -169,6 +170,13 @@ def _get_research_use_cases() -> MedicalResearchUseCases:
     return MedicalResearchUseCases(workspace)
 
 
+def _get_evidence_store() -> EvidenceStore:
+    """Create an evidence store for the configured workspace."""
+    workspace = get_workspace_path()
+    ensure_workspace(workspace)
+    return EvidenceStore(workspace)
+
+
 def _get_configured_provider():
     """Create the configured provider or exit with a readable message."""
     config = load_config()
@@ -208,11 +216,17 @@ def _emit_research_report(
         console.print(str(saved_path))
         return
     if as_json:
-        console.print(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+        _write_json(report.model_dump(mode="json"))
         return
     from medclaw.reporting.briefs import render_research_report
 
     console.print(Markdown(render_research_report(report)))
+
+
+def _write_json(payload) -> None:
+    """Write machine-readable JSON without terminal wrapping."""
+    sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
+    sys.stdout.write("\n")
 
 
 @app.command()
@@ -252,6 +266,58 @@ def research_workflows():
     console.print("[bold]Research Workflows:[/bold]")
     for workflow in workflows:
         console.print(f"  - {workflow['id']}: {workflow['title']}")
+
+
+@research_app.command("artifacts")
+def research_artifacts(
+    search: str | None = typer.Option(None, "--search", help="Filter saved reports by text."),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of records."),
+):
+    """List saved research reports."""
+    store = _get_evidence_store()
+    records = (
+        store.search_report_records(search, limit=limit)
+        if search
+        else store.list_report_records(limit=limit)
+    )
+    if as_json:
+        _write_json(records)
+        return
+
+    console.print("[bold]Research Artifacts:[/bold]")
+    for record in records:
+        console.print(
+            f"  - {record['filename']} [{record['workflow_id']}] evidence={record['evidence_count']}"
+        )
+        console.print(f"      title: {record['title']}")
+        console.print(f"      question: {record['question']}")
+
+
+@research_app.command("show")
+def research_show(
+    report: str,
+    artifact: str = typer.Option(
+        "report",
+        "--artifact",
+        help="One of: report, evidence, citations, metadata.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Output raw JSON payload."),
+):
+    """Show a saved research report or one of its companion artifacts."""
+    store = _get_evidence_store()
+    try:
+        payload = store.read_artifact(report, artifact=artifact)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if as_json or artifact != "report":
+        _write_json(payload)
+        return
+
+    report_model = ResearchReport.model_validate(payload)
+    _emit_research_report(report_model)
 
 
 @research_app.command("literature-review")
