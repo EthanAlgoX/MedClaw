@@ -42,8 +42,12 @@ class ResearchOrchestrator:
         workflow = self.workflows[workflow_id]
         report = await workflow.run(query, provider)
         report = self.policy.apply(report)
-        saved_path = self.evidence_store.save_report(report)
-        report.metadata["saved_path"] = str(saved_path)
+        artifact_paths = self.evidence_store.save_report_artifacts(report)
+        report.metadata["saved_path"] = str(artifact_paths["report"])
+        report.metadata["artifact_dir"] = str(artifact_paths["artifact_dir"])
+        report.metadata["artifact_paths"] = {
+            name: str(path) for name, path in artifact_paths.items()
+        }
         report.metadata["llm_enabled"] = provider is not None
         return report
 

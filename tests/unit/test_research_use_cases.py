@@ -57,6 +57,8 @@ def test_use_case_runs_and_saves_report(temp_workspace: Path, monkeypatch):
     assert "Literature Review" in result
     saved_reports = list((temp_workspace / "research" / "reports").glob("*.json"))
     assert saved_reports
+    artifact_dirs = list((temp_workspace / "research" / "reports").glob("*_artifacts"))
+    assert artifact_dirs
 
 
 def test_use_case_lists_workflows(temp_workspace: Path):
@@ -104,3 +106,5 @@ def test_run_workflow_report_without_llm(temp_workspace: Path, monkeypatch):
     assert "without an LLM" in report.summary
     assert report.metadata["llm_enabled"] is False
     assert report.metadata["saved_path"]
+    assert report.metadata["artifact_dir"]
+    assert report.metadata["artifact_paths"]["citations"].endswith("citations.json")
