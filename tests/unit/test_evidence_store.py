@@ -87,7 +87,7 @@ class TestEvidenceStore:
                 workflow_id="literature_review",
                 question="KRAS inhibitor resistance",
                 title="KRAS Resistance Review",
-                summary="Summary",
+                summary="Summary about resistance patterns in KRAS inhibitor treatment.",
             )
         )
         store.save_report_artifacts(
@@ -105,11 +105,52 @@ class TestEvidenceStore:
         assert records[0]["filename"].endswith(".json")
         assert records[0]["artifact_dir"].endswith("_artifacts")
         assert records[0]["workflow_id"] in {"literature_review", "study_design"}
+        assert records[0]["citation_count"] == 0
+        assert "summary_preview" in records[0]
 
         search_results = store.search_report_records("kras", limit=10)
 
         assert len(search_results) == 1
         assert search_results[0]["title"] == "KRAS Resistance Review"
+
+    def test_filter_report_records_supports_workflow_and_date_ranges(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="KRAS inhibitor resistance",
+                title="KRAS Resistance Review",
+                summary="Summary",
+                generated_at="2026-03-01T09:00:00+00:00",
+            )
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="study_design",
+                question="Adaptive oncology trial design",
+                title="Adaptive Trial Design",
+                summary="Summary",
+                generated_at="2026-03-05T09:00:00+00:00",
+            )
+        )
+
+        workflow_results = store.filter_report_records(workflow_id="study_design", limit=10)
+        date_results = store.filter_report_records(since="2026-03-03", until="2026-03-06", limit=10)
+
+        assert len(workflow_results) == 1
+        assert workflow_results[0]["workflow_id"] == "study_design"
+        assert len(date_results) == 1
+        assert date_results[0]["title"] == "Adaptive Trial Design"
+
+    def test_filter_report_records_rejects_invalid_date(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+
+        try:
+            store.filter_report_records(since="2026/03/01")
+        except ValueError as exc:
+            assert "Invalid isoformat string" in str(exc)
+        else:
+            raise AssertionError("Expected ValueError for invalid date")
 
     def test_read_artifact_returns_structured_payloads(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)

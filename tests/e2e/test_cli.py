@@ -43,6 +43,29 @@ class TestCLI:
         )
         return artifact_paths["report"]
 
+    def _seed_report_with_fields(
+        self,
+        home: Path,
+        *,
+        workflow_id: str,
+        title: str,
+        question: str,
+        summary: str,
+        generated_at: str,
+    ) -> Path:
+        workspace = home / ".medclaw" / "workspace"
+        store = EvidenceStore(workspace)
+        artifact_paths = store.save_report_artifacts(
+            ResearchReport(
+                workflow_id=workflow_id,
+                question=question,
+                title=title,
+                summary=summary,
+                generated_at=generated_at,
+            )
+        )
+        return artifact_paths["report"]
+
     def test_version_command(self):
         """Test version command returns version."""
         result = subprocess.run(
@@ -187,6 +210,67 @@ class TestCLI:
         assert len(payload) == 1
         assert payload[0]["title"] == "KRAS G12C Review"
 
+    def test_research_artifacts_command_supports_workflow_and_date_filters(self, tmp_path, monkeypatch):
+        """Research artifacts command should filter by workflow and generated date."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="KRAS G12C Review",
+            question="KRAS G12C inhibitors",
+            summary="Summary one",
+            generated_at="2026-03-01T09:00:00+00:00",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="study_design",
+            title="Adaptive Trial Design",
+            question="Adaptive oncology trials",
+            summary="Summary two",
+            generated_at="2026-03-06T09:00:00+00:00",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "artifacts",
+                "--workflow",
+                "study_design",
+                "--since",
+                "2026-03-05",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert len(payload) == 1
+        assert payload[0]["workflow_id"] == "study_design"
+        assert payload[0]["generated_at"] == "2026-03-06T09:00:00+00:00"
+
+    def test_research_artifacts_command_rejects_invalid_date(self, tmp_path, monkeypatch):
+        """Research artifacts command should fail cleanly for invalid date filters."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report(test_home)
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--since", "2026/03/01"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 1
+        assert "Invalid isoformat string" in result.stdout
+
     def test_research_show_command_returns_selected_artifact(self, tmp_path, monkeypatch):
         """Research show command should return requested structured artifact."""
         test_home = tmp_path / "test_home"
@@ -212,6 +296,32 @@ class TestCLI:
         assert result.returncode == 0
         payload = json.loads(result.stdout)
         assert payload[0]["identifier"] == "PMID:1"
+
+    def test_research_show_command_supports_summary_view(self, tmp_path, monkeypatch):
+        """Research show command should render a compact summary view."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        report_path = self._seed_report_with_fields(
+            test_home,
+            workflow_id="evidence_brief",
+            title="EGFR Biomarker Brief",
+            question="EGFR biomarkers",
+            summary="A compact summary of EGFR biomarker evidence.",
+            generated_at="2026-03-07T09:00:00+00:00",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "show", report_path.name, "--view", "summary"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "EGFR Biomarker Brief" in result.stdout
+        assert "workflow: evidence_brief" in result.stdout
+        assert "summary: A compact summary" in result.stdout
 
     def test_research_show_command_rejects_invalid_artifact(self, tmp_path, monkeypatch):
         """Research show command should fail cleanly for unsupported artifact names."""

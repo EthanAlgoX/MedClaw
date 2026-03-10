@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any
 
@@ -96,20 +96,57 @@ class EvidenceStore:
 
     def list_report_records(self, limit: int = 50) -> list[dict[str, Any]]:
         """List report metadata records, newest first."""
+        return self.filter_report_records(limit=limit)
+
+    def search_report_records(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Search saved reports by workflow id, title, question, and filename."""
+        return self.filter_report_records(query=query, limit=limit)
+
+    def filter_report_records(
+        self,
+        query: str | None = None,
+        workflow_id: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Filter saved report records by query, workflow, and generated date."""
+        lowered = query.lower().strip() if query else ""
+        normalized_workflow = workflow_id.strip().lower() if workflow_id else ""
+        since_date = self._parse_date_boundary(since, end_of_day=False) if since else None
+        until_date = self._parse_date_boundary(until, end_of_day=True) if until else None
+
         records = []
-        for path in self.list_reports()[:limit]:
+        for path in self.list_reports():
             try:
                 report = self.load_report(path)
             except Exception:
                 continue
-            records.append(self._report_record(path, report))
-        return records
 
-    def search_report_records(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
-        """Search saved reports by workflow id, title, question, and filename."""
-        lowered = query.lower().strip()
-        if not lowered:
-            return self.list_report_records(limit=limit)
+            record = self._report_record(path, report)
+            if normalized_workflow and record["workflow_id"].lower() != normalized_workflow:
+                continue
+            if lowered:
+                haystack = " ".join(
+                    [
+                        record["filename"],
+                        record["workflow_id"],
+                        record["title"],
+                        record["question"],
+                        record["summary_preview"],
+                    ]
+                ).lower()
+                if lowered not in haystack:
+                    continue
+            generated_at = self._parse_generated_at(record["generated_at"])
+            if since_date and generated_at < since_date:
+                continue
+            if until_date and generated_at > until_date:
+                continue
+            records.append(record)
+            if len(records) >= limit:
+                break
+        return records
 
         results = []
         for record in self.list_report_records(limit=limit * 4):
@@ -198,5 +235,27 @@ class EvidenceStore:
             "question": report.question,
             "generated_at": report.generated_at,
             "evidence_count": len(report.evidence),
+            "citation_count": len(self._collect_citations(report)),
+            "summary_preview": self._summary_preview(report.summary),
             "artifact_dir": str(artifact_paths["artifact_dir"]),
         }
+
+    def _summary_preview(self, summary: str, max_length: int = 160) -> str:
+        """Return a compact single-line summary preview."""
+        compact = " ".join(summary.split())
+        if len(compact) <= max_length:
+            return compact
+        return compact[: max_length - 1].rstrip() + "…"
+
+    def _parse_generated_at(self, value: str) -> datetime:
+        """Parse a stored report timestamp."""
+        generated_at = datetime.fromisoformat(value)
+        if generated_at.tzinfo is None:
+            return generated_at.replace(tzinfo=timezone.utc)
+        return generated_at
+
+    def _parse_date_boundary(self, value: str, end_of_day: bool) -> datetime:
+        """Parse a YYYY-MM-DD boundary into a timezone-aware datetime."""
+        parsed_date = date.fromisoformat(value)
+        boundary_time = time.max if end_of_day else time.min
+        return datetime.combine(parsed_date, boundary_time, tzinfo=timezone.utc)

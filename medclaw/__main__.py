@@ -229,6 +229,22 @@ def _write_json(payload) -> None:
     sys.stdout.write("\n")
 
 
+def _emit_report_summary(report: ResearchReport) -> None:
+    """Render a compact summary view for saved reports."""
+    generated_at = report.generated_at.split("T", 1)[0]
+    console.print(f"[bold]{report.title}[/bold]")
+    console.print(f"workflow: {report.workflow_id}")
+    console.print(f"generated: {generated_at}")
+    console.print(f"question: {report.question}")
+    console.print(f"evidence: {len(report.evidence)}")
+    if report.key_findings:
+        console.print("key findings:")
+        for finding in report.key_findings[:5]:
+            console.print(f"  - {finding}")
+    elif report.summary:
+        console.print(f"summary: {' '.join(report.summary.split())}")
+
+
 @app.command()
 def skills(search: str | None = None):
     """List available skills."""
@@ -271,27 +287,57 @@ def research_workflows():
 @research_app.command("artifacts")
 def research_artifacts(
     search: str | None = typer.Option(None, "--search", help="Filter saved reports by text."),
+    workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
+    since: str | None = typer.Option(None, "--since", help="Only include reports on/after YYYY-MM-DD."),
+    until: str | None = typer.Option(None, "--until", help="Only include reports on/before YYYY-MM-DD."),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of records."),
 ):
     """List saved research reports."""
     store = _get_evidence_store()
-    records = (
-        store.search_report_records(search, limit=limit)
-        if search
-        else store.list_report_records(limit=limit)
-    )
+    try:
+        records = store.filter_report_records(
+            query=search,
+            workflow_id=workflow,
+            since=since,
+            until=until,
+            limit=limit,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
     if as_json:
         _write_json(records)
         return
 
-    console.print("[bold]Research Artifacts:[/bold]")
+    if not records:
+        console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
+        return
+
+    filter_suffix = []
+    if workflow:
+        filter_suffix.append(f"workflow={workflow}")
+    if since:
+        filter_suffix.append(f"since={since}")
+    if until:
+        filter_suffix.append(f"until={until}")
+    if search:
+        filter_suffix.append(f"search={search}")
+    suffix = f" ({', '.join(filter_suffix)})" if filter_suffix else ""
+
+    console.print(f"[bold]Research Artifacts{suffix}:[/bold]")
     for record in records:
+        generated_at = record["generated_at"].split("T", 1)[0]
         console.print(
-            f"  - {record['filename']} [{record['workflow_id']}] evidence={record['evidence_count']}"
+            "  - "
+            f"{record['filename']} [{record['workflow_id']}] "
+            f"date={generated_at} evidence={record['evidence_count']} citations={record['citation_count']}"
         )
         console.print(f"      title: {record['title']}")
         console.print(f"      question: {record['question']}")
+        if record["summary_preview"]:
+            console.print(f"      summary: {record['summary_preview']}")
 
 
 @research_app.command("show")
@@ -301,6 +347,11 @@ def research_show(
         "report",
         "--artifact",
         help="One of: report, evidence, citations, metadata.",
+    ),
+    view: str = typer.Option(
+        "full",
+        "--view",
+        help="For report artifacts: full or summary.",
     ),
     as_json: bool = typer.Option(False, "--json", help="Output raw JSON payload."),
 ):
@@ -317,6 +368,12 @@ def research_show(
         return
 
     report_model = ResearchReport.model_validate(payload)
+    if view == "summary":
+        _emit_report_summary(report_model)
+        return
+    if view != "full":
+        console.print("[red]Error:[/red] Unsupported view. Choose from: full, summary")
+        raise typer.Exit(1)
     _emit_research_report(report_model)
 
 
