@@ -76,6 +76,7 @@ class WorkspaceConfig(BaseModel):
     path: Path = Field(default=Path.home() / ".medclaw" / "workspace")
     memoryPath: Path | None = Field(default=None)
     reportsPath: Path | None = Field(default=None)
+    researchPath: Path | None = Field(default=None)
 
 
 class MedClawConfig(BaseModel):

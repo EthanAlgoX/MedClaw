@@ -1,0 +1,46 @@
+"""Workflow execution for MedClaw research jobs."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from medclaw.evidence.models import ResearchReport
+from medclaw.evidence.store import EvidenceStore
+from medclaw.policy.medical_safety import MedicalSafetyPolicy
+from medclaw.providers.base import LLMProvider
+from medclaw.reporting.briefs import render_research_report
+from medclaw.workflows import (
+    ClinicalTrialLandscapeWorkflow,
+    DrugTargetLandscapeWorkflow,
+    EvidenceBriefWorkflow,
+    LiteratureReviewWorkflow,
+    StudyDesignWorkflow,
+)
+
+
+class ResearchOrchestrator:
+    """Run typed research workflows and persist their outputs."""
+
+    def __init__(self, workspace: Path):
+        self.evidence_store = EvidenceStore(workspace)
+        self.policy = MedicalSafetyPolicy()
+        self.workflows = {
+            "literature_review": LiteratureReviewWorkflow(),
+            "clinical_trial_landscape": ClinicalTrialLandscapeWorkflow(),
+            "drug_target_landscape": DrugTargetLandscapeWorkflow(),
+            "study_design": StudyDesignWorkflow(),
+            "evidence_brief": EvidenceBriefWorkflow(),
+        }
+
+    async def run(self, workflow_id: str, query: str, provider: LLMProvider) -> ResearchReport:
+        """Run a workflow, attach policy, and persist the report."""
+        workflow = self.workflows[workflow_id]
+        report = await workflow.run(query, provider)
+        report = self.policy.apply(report)
+        saved_path = self.evidence_store.save_report(report)
+        report.metadata["saved_path"] = str(saved_path)
+        return report
+
+    def render(self, report: ResearchReport) -> str:
+        """Render a workflow report into markdown."""
+        return render_research_report(report)

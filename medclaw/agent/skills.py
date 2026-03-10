@@ -335,7 +335,7 @@ class SkillsLoader:
                 continue
 
             if skill["source"] == "workspace":
-                score += 5
+                score += 8
 
             ranked.append(
                 (
