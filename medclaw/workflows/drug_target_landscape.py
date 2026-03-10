@@ -22,7 +22,7 @@ class DrugTargetLandscapeWorkflow(ResearchWorkflow):
         self.drug_gateway = drug_gateway or DrugGateway()
         self.literature_gateway = literature_gateway or PubMedGateway()
 
-    async def run(self, query: str, provider: LLMProvider) -> ResearchReport:
+    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
         drug_items = await self.drug_gateway.search(query)
         literature_items = await self.literature_gateway.search(query, max_results=4)
         evidence = drug_items + literature_items

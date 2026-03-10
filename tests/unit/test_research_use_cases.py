@@ -69,3 +69,38 @@ def test_use_case_lists_workflows(temp_workspace: Path):
     assert "literature_review" in workflow_ids
     assert "clinical_trial_landscape" in workflow_ids
     assert "evidence_brief" in workflow_ids
+
+
+def test_run_workflow_report_without_llm(temp_workspace: Path, monkeypatch):
+    """Typed workflows should support deterministic fallback summaries without an LLM."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+
+    async def fake_search(query: str, max_results: int = 8):
+        return [
+            EvidenceItem(
+                id="1",
+                kind="literature",
+                source="pubmed",
+                title="Paper 1",
+                summary="Key paper",
+                citations=[Citation(source="pubmed", title="Paper 1", identifier="1")],
+            )
+        ]
+
+    monkeypatch.setattr(
+        use_cases.orchestrator.workflows["literature_review"].gateway,
+        "search",
+        fake_search,
+    )
+
+    report = asyncio.run(
+        use_cases.run_workflow_report(
+            workflow_id="literature_review",
+            query="KRAS inhibitors",
+            provider=None,
+        )
+    )
+
+    assert "without an LLM" in report.summary
+    assert report.metadata["llm_enabled"] is False
+    assert report.metadata["saved_path"]

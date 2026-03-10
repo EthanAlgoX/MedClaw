@@ -22,7 +22,7 @@ class EvidenceBriefWorkflow(ResearchWorkflow):
         self.literature_gateway = literature_gateway or PubMedGateway()
         self.trials_gateway = trials_gateway or ClinicalTrialsGateway()
 
-    async def run(self, query: str, provider: LLMProvider) -> ResearchReport:
+    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
         literature = await self.literature_gateway.search(query, max_results=5)
         trials = await self.trials_gateway.search(query, max_results=3)
         evidence = literature + trials

@@ -13,7 +13,7 @@ class StudyDesignWorkflow(ResearchWorkflow):
     workflow_id = "study_design"
     title = "Study Design Assistant"
 
-    async def run(self, query: str, provider: LLMProvider) -> ResearchReport:
+    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
         summary = await self.synthesize(
             query=query,
             provider=provider,

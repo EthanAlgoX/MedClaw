@@ -100,6 +100,20 @@ class TestCLI:
         assert "literature_review" in result.stdout
         assert "clinical_trial_landscape" in result.stdout
 
+    def test_research_literature_review_help_includes_output_flags(self):
+        """Typed workflow help should expose structured output options."""
+        result = subprocess.run(
+            ["medclaw", "research", "literature-review", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert result.returncode == 0
+        assert "--json" in result.stdout
+        assert "--save-path" in result.stdout
+        assert "--no-llm" in result.stdout
+
     def test_agent_command_short(self):
         """Test agent command starts and exits quickly."""
         # Send a quick exit

@@ -17,7 +17,7 @@ class LiteratureReviewWorkflow(ResearchWorkflow):
     def __init__(self, gateway: PubMedGateway | None = None):
         self.gateway = gateway or PubMedGateway()
 
-    async def run(self, query: str, provider: LLMProvider) -> ResearchReport:
+    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
         evidence = await self.gateway.search(query, max_results=8)
         summary = await self.synthesize(
             query=query,

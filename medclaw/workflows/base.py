@@ -16,23 +16,27 @@ class ResearchWorkflow(ABC):
     title: str
 
     @abstractmethod
-    async def run(self, query: str, provider: LLMProvider) -> ResearchReport:
+    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
         """Execute the workflow."""
 
     async def synthesize(
         self,
         query: str,
-        provider: LLMProvider,
+        provider: LLMProvider | None,
         evidence: Iterable[EvidenceItem],
         instruction: str,
     ) -> str:
         """Use the configured model to summarize normalized evidence."""
+        evidence_list = list(evidence)[:8]
         evidence_lines = []
-        for item in list(evidence)[:8]:
+        for item in evidence_list:
             evidence_lines.append(
                 f"- {item.title} [{item.source}] :: {item.summary or 'No summary'}"
             )
         evidence_block = "\n".join(evidence_lines) or "- No structured evidence retrieved"
+
+        if provider is None:
+            return self._fallback_summary(query=query, evidence=evidence_list)
 
         messages = [
             {
@@ -52,3 +56,19 @@ class ResearchWorkflow(ABC):
             },
         ]
         return await provider.chat(messages, temperature=0.1, max_tokens=900)
+
+    def _fallback_summary(self, query: str, evidence: list[EvidenceItem]) -> str:
+        """Generate a deterministic summary when LLM use is disabled."""
+        if not evidence:
+            return (
+                f"Structured workflow completed for '{query}', but no external evidence "
+                "items were retrieved. Review the query, add richer sources, or rerun with an LLM."
+            )
+
+        sources = sorted({item.source for item in evidence})
+        top_titles = ", ".join(item.title for item in evidence[:3])
+        return (
+            f"Structured workflow completed for '{query}'. Retrieved {len(evidence)} evidence "
+            f"items from {', '.join(sources)}. Leading items: {top_titles}. "
+            "This fallback summary was generated without an LLM."
+        )

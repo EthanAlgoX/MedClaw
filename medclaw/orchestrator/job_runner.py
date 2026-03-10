@@ -32,13 +32,19 @@ class ResearchOrchestrator:
             "evidence_brief": EvidenceBriefWorkflow(),
         }
 
-    async def run(self, workflow_id: str, query: str, provider: LLMProvider) -> ResearchReport:
+    async def run(
+        self,
+        workflow_id: str,
+        query: str,
+        provider: LLMProvider | None,
+    ) -> ResearchReport:
         """Run a workflow, attach policy, and persist the report."""
         workflow = self.workflows[workflow_id]
         report = await workflow.run(query, provider)
         report = self.policy.apply(report)
         saved_path = self.evidence_store.save_report(report)
         report.metadata["saved_path"] = str(saved_path)
+        report.metadata["llm_enabled"] = provider is not None
         return report
 
     def render(self, report: ResearchReport) -> str:

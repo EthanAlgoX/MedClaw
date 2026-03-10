@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from rich.panel import Panel
 from medclaw import __version__
 from medclaw.agent.loop import AgentLoop
 from medclaw.application.use_cases import MedicalResearchUseCases
+from medclaw.evidence.models import ResearchReport
 from medclaw.config.loader import (
     ensure_workspace,
     get_default_config_path,
@@ -178,15 +180,39 @@ def _get_configured_provider():
         raise typer.Exit(1)
 
 
-async def _run_research_workflow(workflow_id: str, query: str) -> str:
-    """Run a typed research workflow."""
+async def _run_research_workflow_report(
+    workflow_id: str,
+    query: str,
+    no_llm: bool = False,
+) -> ResearchReport:
+    """Run a typed research workflow with optional LLM synthesis disabled."""
     use_cases = _get_research_use_cases()
-    _, provider = _get_configured_provider()
-    return await use_cases.run_workflow(
+    provider = None
+    if not no_llm:
+        _, provider = _get_configured_provider()
+    return await use_cases.run_workflow_report(
         workflow_id=workflow_id,
         query=query,
         provider=provider,
     )
+
+
+def _emit_research_report(
+    report: ResearchReport,
+    as_json: bool = False,
+    save_path_only: bool = False,
+) -> None:
+    """Render a research report for CLI output."""
+    saved_path = report.metadata.get("saved_path", "")
+    if save_path_only:
+        console.print(str(saved_path))
+        return
+    if as_json:
+        console.print(json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False))
+        return
+    from medclaw.reporting.briefs import render_research_report
+
+    console.print(Markdown(render_research_report(report)))
 
 
 @app.command()
@@ -229,38 +255,67 @@ def research_workflows():
 
 
 @research_app.command("literature-review")
-def research_literature_review(query: str):
+def research_literature_review(
+    query: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
+):
     """Run the literature review workflow."""
-    response = asyncio.run(_run_research_workflow("literature_review", query))
-    console.print(Markdown(response))
+    report = asyncio.run(_run_research_workflow_report("literature_review", query, no_llm=no_llm))
+    _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 
 @research_app.command("clinical-trial-landscape")
-def research_clinical_trial_landscape(query: str):
+def research_clinical_trial_landscape(
+    query: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
+):
     """Run the clinical trial landscape workflow."""
-    response = asyncio.run(_run_research_workflow("clinical_trial_landscape", query))
-    console.print(Markdown(response))
+    report = asyncio.run(
+        _run_research_workflow_report("clinical_trial_landscape", query, no_llm=no_llm)
+    )
+    _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 
 @research_app.command("drug-target-landscape")
-def research_drug_target_landscape(query: str):
+def research_drug_target_landscape(
+    query: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
+):
     """Run the drug/target landscape workflow."""
-    response = asyncio.run(_run_research_workflow("drug_target_landscape", query))
-    console.print(Markdown(response))
+    report = asyncio.run(
+        _run_research_workflow_report("drug_target_landscape", query, no_llm=no_llm)
+    )
+    _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 
 @research_app.command("study-design")
-def research_study_design(query: str):
+def research_study_design(
+    query: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
+):
     """Run the study design workflow."""
-    response = asyncio.run(_run_research_workflow("study_design", query))
-    console.print(Markdown(response))
+    report = asyncio.run(_run_research_workflow_report("study_design", query, no_llm=no_llm))
+    _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 
 @research_app.command("evidence-brief")
-def research_evidence_brief(query: str):
+def research_evidence_brief(
+    query: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
+):
     """Run the evidence brief workflow."""
-    response = asyncio.run(_run_research_workflow("evidence_brief", query))
-    console.print(Markdown(response))
+    report = asyncio.run(_run_research_workflow_report("evidence_brief", query, no_llm=no_llm))
+    _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 
 def main():
