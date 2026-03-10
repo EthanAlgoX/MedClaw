@@ -37,11 +37,14 @@ class ResearchOrchestrator:
         workflow_id: str,
         query: str,
         provider: LLMProvider | None,
+        collection: str | None = None,
     ) -> ResearchReport:
         """Run a workflow, attach policy, and persist the report."""
         workflow = self.workflows[workflow_id]
         report = await workflow.run(query, provider)
         report = self.policy.apply(report)
+        if collection and collection.strip():
+            report.metadata["collection"] = collection.strip()
         artifact_paths = self.evidence_store.save_report_artifacts(report)
         report.metadata["saved_path"] = str(artifact_paths["report"])
         report.metadata["artifact_dir"] = str(artifact_paths["artifact_dir"])

@@ -30,9 +30,10 @@ class MedicalResearchUseCases:
         workflow_id: str,
         query: str,
         provider: LLMProvider | None,
+        collection: str | None = None,
     ) -> str:
         """Run a specific research workflow."""
-        report = await self.orchestrator.run(workflow_id, query, provider)
+        report = await self.orchestrator.run(workflow_id, query, provider, collection=collection)
         return self.orchestrator.render(report)
 
     async def run_workflow_report(
@@ -40,9 +41,15 @@ class MedicalResearchUseCases:
         workflow_id: str,
         query: str,
         provider: LLMProvider | None,
+        collection: str | None = None,
     ):
         """Run a specific research workflow and return the structured report."""
-        return await self.orchestrator.run(workflow_id, query, provider)
+        return await self.orchestrator.run(
+            workflow_id,
+            query,
+            provider,
+            collection=collection,
+        )
 
     def list_workflows(self) -> list[dict[str, str]]:
         """List available typed workflows."""

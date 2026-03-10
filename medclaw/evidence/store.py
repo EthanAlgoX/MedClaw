@@ -106,6 +106,7 @@ class EvidenceStore:
         self,
         query: str | None = None,
         workflow_id: str | None = None,
+        collection: str | None = None,
         since: str | None = None,
         until: str | None = None,
         limit: int = 50,
@@ -113,6 +114,7 @@ class EvidenceStore:
         """Filter saved report records by query, workflow, and generated date."""
         lowered = query.lower().strip() if query else ""
         normalized_workflow = workflow_id.strip().lower() if workflow_id else ""
+        normalized_collection = collection.strip().lower() if collection else ""
         since_date = self._parse_date_boundary(since, end_of_day=False) if since else None
         until_date = self._parse_date_boundary(until, end_of_day=True) if until else None
 
@@ -126,10 +128,13 @@ class EvidenceStore:
             record = self._report_record(path, report)
             if normalized_workflow and record["workflow_id"].lower() != normalized_workflow:
                 continue
+            if normalized_collection and record["collection"].lower() != normalized_collection:
+                continue
             if lowered:
                 haystack = " ".join(
                     [
                         record["filename"],
+                        record["collection"],
                         record["workflow_id"],
                         record["title"],
                         record["question"],
@@ -147,6 +152,42 @@ class EvidenceStore:
             if len(records) >= limit:
                 break
         return records
+
+    def list_collection_records(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Aggregate saved reports by collection."""
+        collections: dict[str, dict[str, Any]] = {}
+        for record in self.filter_report_records(limit=1000):
+            collection = record["collection"]
+            if not collection:
+                continue
+            entry = collections.get(collection)
+            if entry is None:
+                collections[collection] = {
+                    "collection": collection,
+                    "report_count": 1,
+                    "evidence_count": record["evidence_count"],
+                    "citation_count": record["citation_count"],
+                    "latest_generated_at": record["generated_at"],
+                    "workflows": [record["workflow_id"]],
+                    "titles": [record["title"]],
+                }
+                continue
+
+            entry["report_count"] += 1
+            entry["evidence_count"] += record["evidence_count"]
+            entry["citation_count"] += record["citation_count"]
+            if record["generated_at"] > entry["latest_generated_at"]:
+                entry["latest_generated_at"] = record["generated_at"]
+            if record["workflow_id"] not in entry["workflows"]:
+                entry["workflows"].append(record["workflow_id"])
+            entry["titles"].append(record["title"])
+
+        ordered = sorted(
+            collections.values(),
+            key=lambda item: (item["latest_generated_at"], item["collection"]),
+            reverse=True,
+        )
+        return ordered[:limit]
 
         results = []
         for record in self.list_report_records(limit=limit * 4):
@@ -230,6 +271,7 @@ class EvidenceStore:
         return {
             "path": str(path),
             "filename": path.name,
+            "collection": str(report.metadata.get("collection", "")).strip(),
             "workflow_id": report.workflow_id,
             "title": report.title,
             "question": report.question,

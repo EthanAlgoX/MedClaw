@@ -52,6 +52,7 @@ class TestCLI:
         question: str,
         summary: str,
         generated_at: str,
+        collection: str | None = None,
     ) -> Path:
         workspace = home / ".medclaw" / "workspace"
         store = EvidenceStore(workspace)
@@ -62,6 +63,7 @@ class TestCLI:
                 title=title,
                 summary=summary,
                 generated_at=generated_at,
+                metadata={"collection": collection} if collection else {},
             )
         )
         return artifact_paths["report"]
@@ -221,6 +223,7 @@ class TestCLI:
             question="KRAS G12C inhibitors",
             summary="Summary one",
             generated_at="2026-03-01T09:00:00+00:00",
+            collection="KRAS Program",
         )
         self._seed_report_with_fields(
             test_home,
@@ -253,6 +256,86 @@ class TestCLI:
         assert len(payload) == 1
         assert payload[0]["workflow_id"] == "study_design"
         assert payload[0]["generated_at"] == "2026-03-06T09:00:00+00:00"
+
+    def test_research_artifacts_command_supports_collection_filter(self, tmp_path, monkeypatch):
+        """Research artifacts command should filter reports by collection."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="KRAS G12C Review",
+            question="KRAS G12C inhibitors",
+            summary="Summary one",
+            generated_at="2026-03-01T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="study_design",
+            title="Adaptive Trial Design",
+            question="Adaptive oncology trials",
+            summary="Summary two",
+            generated_at="2026-03-06T09:00:00+00:00",
+            collection="Trial Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "artifacts",
+                "--collection",
+                "KRAS Program",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert len(payload) == 1
+        assert payload[0]["collection"] == "KRAS Program"
+
+    def test_research_collections_command_lists_named_groups(self, tmp_path, monkeypatch):
+        """Research collections command should aggregate reports by collection."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="KRAS G12C Review",
+            question="KRAS G12C inhibitors",
+            summary="Summary one",
+            generated_at="2026-03-01T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="evidence_brief",
+            title="KRAS Biomarker Brief",
+            question="KRAS biomarkers",
+            summary="Summary two",
+            generated_at="2026-03-06T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "collections", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert len(payload) == 1
+        assert payload[0]["collection"] == "KRAS Program"
+        assert payload[0]["report_count"] == 2
 
     def test_research_artifacts_command_rejects_invalid_date(self, tmp_path, monkeypatch):
         """Research artifacts command should fail cleanly for invalid date filters."""
@@ -308,6 +391,7 @@ class TestCLI:
             question="EGFR biomarkers",
             summary="A compact summary of EGFR biomarker evidence.",
             generated_at="2026-03-07T09:00:00+00:00",
+            collection="EGFR Program",
         )
         monkeypatch.setenv("HOME", str(test_home))
 
@@ -321,6 +405,7 @@ class TestCLI:
         assert result.returncode == 0
         assert "EGFR Biomarker Brief" in result.stdout
         assert "workflow: evidence_brief" in result.stdout
+        assert "collection: EGFR Program" in result.stdout
         assert "summary: A compact summary" in result.stdout
 
     def test_research_show_command_rejects_invalid_artifact(self, tmp_path, monkeypatch):

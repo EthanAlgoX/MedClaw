@@ -192,6 +192,7 @@ async def _run_research_workflow_report(
     workflow_id: str,
     query: str,
     no_llm: bool = False,
+    collection: str | None = None,
 ) -> ResearchReport:
     """Run a typed research workflow with optional LLM synthesis disabled."""
     use_cases = _get_research_use_cases()
@@ -202,6 +203,7 @@ async def _run_research_workflow_report(
         workflow_id=workflow_id,
         query=query,
         provider=provider,
+        collection=collection,
     )
 
 
@@ -234,6 +236,8 @@ def _emit_report_summary(report: ResearchReport) -> None:
     generated_at = report.generated_at.split("T", 1)[0]
     console.print(f"[bold]{report.title}[/bold]")
     console.print(f"workflow: {report.workflow_id}")
+    if report.metadata.get("collection"):
+        console.print(f"collection: {report.metadata['collection']}")
     console.print(f"generated: {generated_at}")
     console.print(f"question: {report.question}")
     console.print(f"evidence: {len(report.evidence)}")
@@ -288,6 +292,7 @@ def research_workflows():
 def research_artifacts(
     search: str | None = typer.Option(None, "--search", help="Filter saved reports by text."),
     workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
+    collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
     since: str | None = typer.Option(None, "--since", help="Only include reports on/after YYYY-MM-DD."),
     until: str | None = typer.Option(None, "--until", help="Only include reports on/before YYYY-MM-DD."),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
@@ -299,6 +304,7 @@ def research_artifacts(
         records = store.filter_report_records(
             query=search,
             workflow_id=workflow,
+            collection=collection,
             since=since,
             until=until,
             limit=limit,
@@ -318,6 +324,8 @@ def research_artifacts(
     filter_suffix = []
     if workflow:
         filter_suffix.append(f"workflow={workflow}")
+    if collection:
+        filter_suffix.append(f"collection={collection}")
     if since:
         filter_suffix.append(f"since={since}")
     if until:
@@ -334,10 +342,40 @@ def research_artifacts(
             f"{record['filename']} [{record['workflow_id']}] "
             f"date={generated_at} evidence={record['evidence_count']} citations={record['citation_count']}"
         )
+        if record["collection"]:
+            console.print(f"      collection: {record['collection']}")
         console.print(f"      title: {record['title']}")
         console.print(f"      question: {record['question']}")
         if record["summary_preview"]:
             console.print(f"      summary: {record['summary_preview']}")
+
+
+@research_app.command("collections")
+def research_collections(
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
+):
+    """List named research collections."""
+    store = _get_evidence_store()
+    records = store.list_collection_records(limit=limit)
+    if as_json:
+        _write_json(records)
+        return
+
+    if not records:
+        console.print("[yellow]No named research collections found.[/yellow]")
+        return
+
+    console.print("[bold]Research Collections:[/bold]")
+    for record in records:
+        latest = record["latest_generated_at"].split("T", 1)[0]
+        console.print(
+            "  - "
+            f"{record['collection']} reports={record['report_count']} "
+            f"evidence={record['evidence_count']} citations={record['citation_count']} latest={latest}"
+        )
+        console.print(f"      workflows: {', '.join(record['workflows'])}")
+        console.print(f"      titles: {', '.join(record['titles'][:3])}")
 
 
 @research_app.command("show")
@@ -380,25 +418,39 @@ def research_show(
 @research_app.command("literature-review")
 def research_literature_review(
     query: str,
+    collection: str | None = typer.Option(None, "--collection", help="Group this report under a named collection."),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
     no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
 ):
     """Run the literature review workflow."""
-    report = asyncio.run(_run_research_workflow_report("literature_review", query, no_llm=no_llm))
+    report = asyncio.run(
+        _run_research_workflow_report(
+            "literature_review",
+            query,
+            no_llm=no_llm,
+            collection=collection,
+        )
+    )
     _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 
 @research_app.command("clinical-trial-landscape")
 def research_clinical_trial_landscape(
     query: str,
+    collection: str | None = typer.Option(None, "--collection", help="Group this report under a named collection."),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
     no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
 ):
     """Run the clinical trial landscape workflow."""
     report = asyncio.run(
-        _run_research_workflow_report("clinical_trial_landscape", query, no_llm=no_llm)
+        _run_research_workflow_report(
+            "clinical_trial_landscape",
+            query,
+            no_llm=no_llm,
+            collection=collection,
+        )
     )
     _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
@@ -406,13 +458,19 @@ def research_clinical_trial_landscape(
 @research_app.command("drug-target-landscape")
 def research_drug_target_landscape(
     query: str,
+    collection: str | None = typer.Option(None, "--collection", help="Group this report under a named collection."),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
     no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
 ):
     """Run the drug/target landscape workflow."""
     report = asyncio.run(
-        _run_research_workflow_report("drug_target_landscape", query, no_llm=no_llm)
+        _run_research_workflow_report(
+            "drug_target_landscape",
+            query,
+            no_llm=no_llm,
+            collection=collection,
+        )
     )
     _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
@@ -420,24 +478,40 @@ def research_drug_target_landscape(
 @research_app.command("study-design")
 def research_study_design(
     query: str,
+    collection: str | None = typer.Option(None, "--collection", help="Group this report under a named collection."),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
     no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
 ):
     """Run the study design workflow."""
-    report = asyncio.run(_run_research_workflow_report("study_design", query, no_llm=no_llm))
+    report = asyncio.run(
+        _run_research_workflow_report(
+            "study_design",
+            query,
+            no_llm=no_llm,
+            collection=collection,
+        )
+    )
     _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 
 @research_app.command("evidence-brief")
 def research_evidence_brief(
     query: str,
+    collection: str | None = typer.Option(None, "--collection", help="Group this report under a named collection."),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     save_path: bool = typer.Option(False, "--save-path", help="Print only the saved report path."),
     no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
 ):
     """Run the evidence brief workflow."""
-    report = asyncio.run(_run_research_workflow_report("evidence_brief", query, no_llm=no_llm))
+    report = asyncio.run(
+        _run_research_workflow_report(
+            "evidence_brief",
+            query,
+            no_llm=no_llm,
+            collection=collection,
+        )
+    )
     _emit_research_report(report, as_json=as_json, save_path_only=save_path)
 
 

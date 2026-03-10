@@ -122,6 +122,7 @@ class TestEvidenceStore:
                 title="KRAS Resistance Review",
                 summary="Summary",
                 generated_at="2026-03-01T09:00:00+00:00",
+                metadata={"collection": "KRAS Program"},
             )
         )
         store.save_report_artifacts(
@@ -135,10 +136,13 @@ class TestEvidenceStore:
         )
 
         workflow_results = store.filter_report_records(workflow_id="study_design", limit=10)
+        collection_results = store.filter_report_records(collection="KRAS Program", limit=10)
         date_results = store.filter_report_records(since="2026-03-03", until="2026-03-06", limit=10)
 
         assert len(workflow_results) == 1
         assert workflow_results[0]["workflow_id"] == "study_design"
+        assert len(collection_results) == 1
+        assert collection_results[0]["collection"] == "KRAS Program"
         assert len(date_results) == 1
         assert date_results[0]["title"] == "Adaptive Trial Design"
 
@@ -151,6 +155,36 @@ class TestEvidenceStore:
             assert "Invalid isoformat string" in str(exc)
         else:
             raise AssertionError("Expected ValueError for invalid date")
+
+    def test_list_collection_records_aggregates_named_projects(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="KRAS inhibitor resistance",
+                title="KRAS Resistance Review",
+                summary="Summary",
+                generated_at="2026-03-01T09:00:00+00:00",
+                metadata={"collection": "KRAS Program"},
+            )
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="evidence_brief",
+                question="KRAS biomarkers",
+                title="KRAS Biomarker Brief",
+                summary="Summary",
+                generated_at="2026-03-06T09:00:00+00:00",
+                metadata={"collection": "KRAS Program"},
+            )
+        )
+
+        collections = store.list_collection_records(limit=10)
+
+        assert len(collections) == 1
+        assert collections[0]["collection"] == "KRAS Program"
+        assert collections[0]["report_count"] == 2
+        assert set(collections[0]["workflows"]) == {"literature_review", "evidence_brief"}
 
     def test_read_artifact_returns_structured_payloads(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
