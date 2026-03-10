@@ -192,3 +192,49 @@ class TestSkillsLoader:
         matched = skills_loader.match_skills_for_request("Find recruiting clinical trials for diabetes")
 
         assert "clinicaltrials-database" in matched
+
+    def test_runtime_skill_filter_keeps_workspace_and_core_only(self, temp_workspace: Path):
+        """Runtime listing should include workspace skills and curated core builtin skills only."""
+        builtin_dir = temp_workspace / "builtin"
+        (builtin_dir / "pubmed-search").mkdir(parents=True)
+        (builtin_dir / "pubmed-search" / "SKILL.md").write_text("# Core skill")
+        (builtin_dir / "iso-13485-certification").mkdir(parents=True)
+        (builtin_dir / "iso-13485-certification" / "SKILL.md").write_text("# Extended skill")
+
+        workspace_skill_dir = temp_workspace / "skills" / "custom-research-skill"
+        workspace_skill_dir.mkdir(parents=True)
+        (workspace_skill_dir / "SKILL.md").write_text("# Workspace skill")
+
+        loader = SkillsLoader(temp_workspace, builtin_skills_dir=builtin_dir)
+
+        runtime_skills = loader.list_runtime_skills(filter_unavailable=False)
+        runtime_names = {skill["name"] for skill in runtime_skills}
+        all_names = {skill["name"] for skill in loader.list_skills(filter_unavailable=False)}
+
+        assert "pubmed-search" in runtime_names
+        assert "custom-research-skill" in runtime_names
+        assert "iso-13485-certification" not in runtime_names
+        assert "iso-13485-certification" in all_names
+
+    def test_match_skills_runtime_only_excludes_non_core_builtin(self, temp_workspace: Path):
+        """Default runtime matching should not route into non-core builtin skills."""
+        builtin_dir = temp_workspace / "builtin"
+        (builtin_dir / "pubmed-search").mkdir(parents=True)
+        (
+            builtin_dir / "pubmed-search" / "SKILL.md"
+        ).write_text("---\ndescription: Search PubMed literature\n---\n# PubMed")
+        (builtin_dir / "iso-13485-certification").mkdir(parents=True)
+        (
+            builtin_dir / "iso-13485-certification" / "SKILL.md"
+        ).write_text("---\ndescription: Medical quality systems\n---\n# ISO")
+
+        loader = SkillsLoader(temp_workspace, builtin_skills_dir=builtin_dir)
+
+        matched_runtime = loader.match_skills_for_request("Search PubMed for cancer")
+        matched_all = loader.match_skills_for_request(
+            "medical quality systems",
+            runtime_only=False,
+        )
+
+        assert matched_runtime == ["pubmed-search"]
+        assert "iso-13485-certification" in matched_all

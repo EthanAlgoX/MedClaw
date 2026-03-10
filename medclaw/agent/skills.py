@@ -14,6 +14,26 @@ BUILTIN_SKILLS_DIR = Path(__file__).parent.parent / "skills"
 class SkillsLoader:
     """Load, summarize, and rank MedClaw skills."""
 
+    CORE_RUNTIME_SKILLS = {
+        "citation-management",
+        "clinical-trials-search",
+        "clinicaltrials-database",
+        "drug-lookup",
+        "literature-review",
+        "medical-research-toolkit",
+        "paper-summarize",
+        "pubmed-database",
+        "pubmed-search",
+        "research-lookup",
+        "search-strategy",
+        "study-design",
+        "tooluniverse-clinical-guidelines",
+        "tooluniverse-clinical-trial-matching",
+        "tooluniverse-disease-research",
+        "tooluniverse-drug-research",
+        "tooluniverse-drug-target-validation",
+    }
+
     _STOPWORDS = {
         "a",
         "an",
@@ -67,6 +87,7 @@ class SkillsLoader:
         self,
         filter_unavailable: bool = True,
         available_tools: set[str] | None = None,
+        runtime_only: bool = False,
     ) -> list[dict[str, str]]:
         """List all available skills, preferring workspace overrides."""
         skills_by_name: dict[str, dict[str, str]] = {}
@@ -94,6 +115,8 @@ class SkillsLoader:
             collect(self.builtin_skills, "builtin")
 
         skills = list(skills_by_name.values())
+        if runtime_only:
+            skills = [skill for skill in skills if self._is_runtime_skill(skill)]
         if filter_unavailable:
             return [
                 skill
@@ -104,6 +127,18 @@ class SkillsLoader:
                 )
             ]
         return skills
+
+    def list_runtime_skills(
+        self,
+        filter_unavailable: bool = True,
+        available_tools: set[str] | None = None,
+    ) -> list[dict[str, str]]:
+        """List only the curated runtime skills plus workspace overrides."""
+        return self.list_skills(
+            filter_unavailable=filter_unavailable,
+            available_tools=available_tools,
+            runtime_only=True,
+        )
 
     def load_skill(self, name: str) -> str | None:
         """Load a skill by name."""
@@ -142,11 +177,13 @@ class SkillsLoader:
     def build_skills_summary(
         self,
         available_tools: set[str] | None = None,
+        runtime_only: bool = False,
     ) -> str:
         """Build an XML summary of all skills."""
         all_skills = self.list_skills(
             filter_unavailable=False,
             available_tools=available_tools,
+            runtime_only=runtime_only,
         )
         if not all_skills:
             return ""
@@ -166,6 +203,7 @@ class SkillsLoader:
             lines.append(f"    <description>{description}</description>")
             lines.append(f"    <location>{path}</location>")
             lines.append(f"    <source>{escape_xml(skill['source'])}</source>")
+            lines.append(f"    <tier>{'core' if self._is_runtime_skill(skill) else 'extended'}</tier>")
 
             if capabilities.get("triggers"):
                 trigger_text = escape_xml(", ".join(capabilities["triggers"]))
@@ -280,6 +318,7 @@ class SkillsLoader:
         self,
         text: str,
         available_tools: set[str] | None = None,
+        runtime_only: bool = True,
     ) -> list[str]:
         """Return the most relevant skills for a user request."""
         return [
@@ -288,6 +327,7 @@ class SkillsLoader:
                 text,
                 limit=3,
                 available_tools=available_tools,
+                runtime_only=runtime_only,
             )
         ]
 
@@ -296,12 +336,14 @@ class SkillsLoader:
         text: str,
         limit: int = 5,
         available_tools: set[str] | None = None,
+        runtime_only: bool = False,
     ) -> list[dict[str, str]]:
         """Search local skills by name, description, and derived keywords."""
         return self.suggest_skills_for_request(
             text,
             limit=limit,
             available_tools=available_tools,
+            runtime_only=runtime_only,
         )
 
     def suggest_skills_for_request(
@@ -309,6 +351,7 @@ class SkillsLoader:
         text: str,
         limit: int = 5,
         available_tools: set[str] | None = None,
+        runtime_only: bool = False,
     ) -> list[dict[str, str]]:
         """Rank skills for a request using names, frontmatter, and descriptions."""
         query = text.lower().strip()
@@ -321,6 +364,7 @@ class SkillsLoader:
         for skill in self.list_skills(
             filter_unavailable=True,
             available_tools=available_tools,
+            runtime_only=runtime_only,
         ):
             description = self._get_skill_description(skill["name"])
             capabilities = self.get_skill_capabilities(skill["name"])
@@ -351,6 +395,10 @@ class SkillsLoader:
 
         ranked.sort(key=lambda item: (-item[0], item[1]["name"]))
         return [item for _, item in ranked[:limit]]
+
+    def _is_runtime_skill(self, skill: dict[str, str]) -> bool:
+        """Return True for skills that should participate in default runtime routing."""
+        return skill["source"] == "workspace" or skill["name"] in self.CORE_RUNTIME_SKILLS
 
     def get_skill_metadata(self, name: str) -> dict[str, Any] | None:
         """Get metadata from a skill's frontmatter."""
