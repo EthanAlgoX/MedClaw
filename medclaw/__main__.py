@@ -15,6 +15,13 @@ from rich.panel import Panel
 from medclaw import __version__
 from medclaw.agent.loop import AgentLoop
 from medclaw.application.use_cases import MedicalResearchUseCases
+from medclaw.evidence.artifacts import (
+    CLI_ARTIFACTS,
+    CLI_ARTIFACT_HELP,
+    artifact_choices_for_kind,
+    build_unsupported_artifact_error,
+    normalize_artifact_name,
+)
 from medclaw.evidence.models import ResearchReport
 from medclaw.evidence.store import EvidenceStore
 from medclaw.config.loader import (
@@ -31,12 +38,6 @@ from medclaw.utils.logging import setup_logging
 app = typer.Typer(help="MedClaw - AI-powered medical research assistant")
 research_app = typer.Typer(help="Typed medical research workflows")
 console = Console()
-REPORT_ARTIFACTS = ("report", "evidence", "citations", "metadata")
-BUNDLE_ARTIFACTS = ("bundle_markdown", "bundle_json", "metadata")
-CLI_ARTIFACTS = ("report", "evidence", "citations", "metadata", "bundle_markdown", "bundle_json")
-CLI_ARTIFACT_HELP = (
-    "Specific artifact: report, evidence, citations, metadata, bundle-markdown, bundle-json."
-)
 
 app.add_typer(research_app, name="research")
 
@@ -280,27 +281,7 @@ def _emit_artifact_record(record: dict, store: EvidenceStore) -> None:
 
 def _normalize_artifact_option(artifact: str | None) -> str | None:
     """Normalize CLI artifact option names."""
-    if artifact is None:
-        return None
-    normalized = artifact.strip().lower().replace("-", "_")
-    if normalized not in CLI_ARTIFACTS:
-        supported = ", ".join(name.replace("_", "-") for name in CLI_ARTIFACTS)
-        raise ValueError(f"Unsupported artifact '{artifact}'. Choose from: {supported}")
-    return normalized
-
-
-def _artifact_choices_for_kind(kind: str) -> tuple[str, ...]:
-    """Return supported artifact names for a unified artifact kind."""
-    if kind == "collection_bundle":
-        return BUNDLE_ARTIFACTS
-    if kind == "report":
-        return REPORT_ARTIFACTS
-    raise ValueError(f"Unsupported artifact kind: {kind}")
-
-
-def _format_artifact_choices(choices: tuple[str, ...]) -> str:
-    """Render artifact choices in CLI-friendly spelling."""
-    return ", ".join(choice.replace("_", "-") for choice in choices)
+    return normalize_artifact_name(artifact, choices=CLI_ARTIFACTS)
 
 
 def _artifact_paths_for_record(record: dict, store: EvidenceStore) -> dict[str, Path]:
@@ -312,12 +293,9 @@ def _artifact_paths_for_record(record: dict, store: EvidenceStore) -> dict[str, 
 
 def _artifact_payload_for_record(record: dict, store: EvidenceStore, artifact: str):
     """Read a specific artifact payload for a unified artifact record."""
-    supported = _artifact_choices_for_kind(record["kind"])
+    supported = artifact_choices_for_kind(record["kind"])
     if artifact not in supported:
-        raise ValueError(
-            f"Unsupported artifact '{artifact.replace('_', '-')}' for {record['kind']}. "
-            f"Choose from: {_format_artifact_choices(supported)}"
-        )
+        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record["kind"])
     if record["kind"] == "collection_bundle":
         return store.read_bundle_artifact(record["id"], artifact=artifact)
     return store.read_artifact(record["id"], artifact=artifact)
@@ -325,18 +303,12 @@ def _artifact_payload_for_record(record: dict, store: EvidenceStore, artifact: s
 
 def _artifact_path_for_record(record: dict, store: EvidenceStore, artifact: str) -> str:
     """Resolve a specific artifact path for a unified artifact record."""
-    supported = _artifact_choices_for_kind(record["kind"])
+    supported = artifact_choices_for_kind(record["kind"])
     if artifact not in supported:
-        raise ValueError(
-            f"Unsupported artifact '{artifact.replace('_', '-')}' for {record['kind']}. "
-            f"Choose from: {_format_artifact_choices(supported)}"
-        )
+        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record["kind"])
     paths = _artifact_paths_for_record(record, store)
     if artifact not in paths:
-        raise ValueError(
-            f"Unsupported artifact '{artifact.replace('_', '-')}' for {record['kind']}. "
-            f"Choose from: {_format_artifact_choices(supported)}"
-        )
+        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record["kind"])
     return str(paths[artifact])
 
 

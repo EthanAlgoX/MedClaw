@@ -7,6 +7,12 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any
 
+from medclaw.evidence.artifacts import (
+    REPORT_PATH_ARTIFACTS,
+    BUNDLE_PATH_ARTIFACTS,
+    build_unsupported_artifact_error,
+    normalize_artifact_name,
+)
 from medclaw.evidence.models import Citation, ResearchReport
 
 
@@ -531,30 +537,39 @@ class EvidenceStore:
 
     def read_artifact(self, path: Path | str, artifact: str = "report") -> Any:
         """Read a specific artifact payload."""
-        if artifact in {"bundle_markdown", "bundle_json"}:
-            return self.read_bundle_artifact(path, artifact=artifact)
+        normalized_artifact = normalize_artifact_name(
+            artifact,
+            choices=REPORT_PATH_ARTIFACTS + ("bundle_markdown", "bundle_json"),
+        )
+        assert normalized_artifact is not None
+        if normalized_artifact in {"bundle_markdown", "bundle_json"}:
+            return self.read_bundle_artifact(path, artifact=normalized_artifact)
         artifact_paths = self.get_artifact_paths(path)
-        if artifact not in artifact_paths:
-            supported = ", ".join(sorted(artifact_paths))
-            raise ValueError(f"Unsupported artifact '{artifact}'. Choose from: {supported}")
-        target = artifact_paths[artifact]
-        if artifact == "artifact_dir":
+        if normalized_artifact not in artifact_paths:
+            raise build_unsupported_artifact_error(artifact, REPORT_PATH_ARTIFACTS)
+        target = artifact_paths[normalized_artifact]
+        if normalized_artifact == "artifact_dir":
             return str(target)
-        if artifact == "report":
+        if normalized_artifact == "report":
             report = self.load_report(target)
             return report.model_dump(mode="json")
         return json.loads(target.read_text(encoding="utf-8"))
 
     def read_bundle_artifact(self, path: Path | str, artifact: str = "bundle_markdown") -> Any:
         """Read a saved collection bundle artifact."""
+        normalized_artifact = normalize_artifact_name(
+            artifact,
+            choices=BUNDLE_PATH_ARTIFACTS,
+            kind="collection_bundle",
+        )
+        assert normalized_artifact is not None
         artifact_paths = self.get_bundle_artifact_paths(path)
-        if artifact not in artifact_paths:
-            supported = ", ".join(sorted(artifact_paths))
-            raise ValueError(f"Unsupported bundle artifact '{artifact}'. Choose from: {supported}")
-        target = artifact_paths[artifact]
-        if artifact == "artifact_dir":
+        if normalized_artifact not in artifact_paths:
+            raise build_unsupported_artifact_error(artifact, BUNDLE_PATH_ARTIFACTS, kind="collection_bundle")
+        target = artifact_paths[normalized_artifact]
+        if normalized_artifact == "artifact_dir":
             return str(target)
-        if artifact == "bundle_markdown":
+        if normalized_artifact == "bundle_markdown":
             return target.read_text(encoding="utf-8")
         return json.loads(target.read_text(encoding="utf-8"))
 

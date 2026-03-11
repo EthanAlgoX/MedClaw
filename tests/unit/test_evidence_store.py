@@ -482,7 +482,7 @@ class TestEvidenceStore:
         )
 
         markdown_payload = store.read_bundle_artifact(bundle_paths["artifact_dir"].name, artifact="bundle_markdown")
-        json_payload = store.read_bundle_artifact(bundle_paths["artifact_dir"], artifact="bundle_json")
+        json_payload = store.read_bundle_artifact(bundle_paths["artifact_dir"], artifact="bundle-json")
 
         assert markdown_payload.startswith("# Collection Brief: KRAS Program")
         assert json_payload["kind"] == "collection_bundle"
