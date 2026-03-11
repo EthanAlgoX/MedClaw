@@ -163,9 +163,13 @@ class EvidenceStore:
         collection: str | None = None,
         since: str | None = None,
         until: str | None = None,
+        latest: bool = False,
+        latest_by_collection: bool = False,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """List saved report and bundle artifacts under a unified index."""
+        if latest and latest_by_collection:
+            raise ValueError("Choose either latest or latest_by_collection, not both")
         normalized_kind = self._normalize_artifact_kind(kind)
         include_reports = normalized_kind in {"all", "report"}
         include_bundles = normalized_kind in {"all", "collection_bundle"}
@@ -189,9 +193,13 @@ class EvidenceStore:
                 since=since,
                 until=until,
                 limit=limit * 2,
-            )
+        )
         records = report_records + bundle_records
         records.sort(key=lambda record: (record["generated_at"], record["kind"]), reverse=True)
+        if latest:
+            return records[:1]
+        if latest_by_collection:
+            return self._latest_records_by_collection(records, limit=limit)
         return records[:limit]
 
     def list_collection_records(self, limit: int = 50) -> list[dict[str, Any]]:
@@ -710,6 +718,27 @@ class EvidenceStore:
             supported = ", ".join(sorted(aliases))
             raise ValueError(f"Unsupported artifact kind '{kind}'. Choose from: {supported}")
         return aliases[normalized]
+
+    def _latest_records_by_collection(
+        self,
+        records: list[dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Keep only the newest artifact for each named collection."""
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for record in records:
+            collection = record.get("collection", "").strip()
+            if not collection:
+                continue
+            key = collection.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(record)
+            if len(deduped) >= limit:
+                break
+        return deduped
 
     def resolve_bundle_artifact_dir(self, path: Path | str) -> Path:
         """Resolve a collection bundle artifact directory from an id, dir, or file path."""

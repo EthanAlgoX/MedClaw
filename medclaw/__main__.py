@@ -391,6 +391,12 @@ def research_artifacts(
     collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
     since: str | None = typer.Option(None, "--since", help="Only include reports on/after YYYY-MM-DD."),
     until: str | None = typer.Option(None, "--until", help="Only include reports on/before YYYY-MM-DD."),
+    latest: bool = typer.Option(False, "--latest", help="Return only the newest matching artifact."),
+    latest_by_collection: bool = typer.Option(
+        False,
+        "--latest-by-collection",
+        help="Return the newest matching artifact for each named collection.",
+    ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of records."),
 ):
@@ -404,6 +410,8 @@ def research_artifacts(
             collection=collection,
             since=since,
             until=until,
+            latest=latest,
+            latest_by_collection=latest_by_collection,
             limit=limit,
         )
     except ValueError as e:
@@ -421,6 +429,10 @@ def research_artifacts(
     filter_suffix = []
     if kind:
         filter_suffix.append(f"kind={kind}")
+    if latest:
+        filter_suffix.append("latest")
+    if latest_by_collection:
+        filter_suffix.append("latest_by_collection")
     if workflow:
         filter_suffix.append(f"workflow={workflow}")
     if collection:

@@ -406,6 +406,59 @@ class TestEvidenceStore:
         assert len(bundle_records) == 1
         assert bundle_records[0]["kind"] == "collection_bundle"
 
+    def test_list_artifact_records_supports_latest_and_latest_by_collection(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="evidence_brief",
+                question="KRAS biomarkers",
+                title="KRAS Biomarker Brief",
+                summary="Summary",
+                generated_at="2026-03-06T09:00:00+00:00",
+                metadata={"collection": "KRAS Program"},
+            )
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="study_design",
+                question="EGFR biomarkers",
+                title="EGFR Study Design",
+                summary="Summary",
+                generated_at="2026-03-07T09:00:00+00:00",
+                metadata={"collection": "EGFR Program"},
+            )
+        )
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+
+        latest_record = store.list_artifact_records(latest=True, limit=10)
+        latest_by_collection = store.list_artifact_records(latest_by_collection=True, limit=10)
+
+        assert len(latest_record) == 1
+        assert latest_record[0]["kind"] == "collection_bundle"
+        assert len(latest_by_collection) == 2
+        assert {record["collection"] for record in latest_by_collection} == {"KRAS Program", "EGFR Program"}
+        assert any(record["kind"] == "collection_bundle" for record in latest_by_collection)
+
     def test_read_bundle_artifact_supports_markdown_and_json(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
         bundle_paths = store.save_collection_bundle_artifacts(

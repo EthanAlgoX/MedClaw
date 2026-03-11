@@ -205,6 +205,8 @@ class TestCLI:
 
         assert result.returncode == 0
         assert "--kind" in result.stdout
+        assert "--latest" in result.stdout
+        assert "--latest-by-collection" in result.stdout
 
     def test_research_artifacts_command_lists_saved_reports(self, tmp_path, monkeypatch):
         """Research artifacts command should list stored report records."""
@@ -321,6 +323,74 @@ class TestCLI:
         assert report_payload[0]["kind"] == "report"
         assert len(bundle_payload) == 1
         assert bundle_payload[0]["kind"] == "collection_bundle"
+
+    def test_research_artifacts_command_supports_latest_views(self, tmp_path, monkeypatch):
+        """Artifact listing should support latest overall and latest per collection views."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="evidence_brief",
+            title="KRAS Biomarker Brief",
+            question="KRAS biomarkers",
+            summary="Summary",
+            generated_at="2026-03-06T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="study_design",
+            title="EGFR Study Design",
+            question="EGFR biomarkers",
+            summary="Summary",
+            generated_at="2026-03-07T09:00:00+00:00",
+            collection="EGFR Program",
+        )
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        latest_result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--latest", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        latest_by_collection_result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--latest-by-collection", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert latest_result.returncode == 0
+        assert latest_by_collection_result.returncode == 0
+        latest_payload = json.loads(latest_result.stdout)
+        latest_by_collection_payload = json.loads(latest_by_collection_result.stdout)
+        assert len(latest_payload) == 1
+        assert latest_payload[0]["kind"] == "collection_bundle"
+        assert len(latest_by_collection_payload) == 2
+        assert {item["collection"] for item in latest_by_collection_payload} == {"KRAS Program", "EGFR Program"}
 
     def test_research_artifacts_command_supports_search(self, tmp_path, monkeypatch):
         """Research artifacts command should filter reports by search text."""
