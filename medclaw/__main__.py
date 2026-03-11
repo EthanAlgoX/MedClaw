@@ -25,6 +25,8 @@ from medclaw.application import (
     build_collection_response,
     build_research_report_list_response,
     build_research_report_response,
+    build_skill_list_response,
+    build_workflow_list_response,
 )
 from medclaw.evidence.api_models import ArtifactRecord, CollectionBundleArtifactRecord, CollectionRecord
 from medclaw.evidence.artifacts import (
@@ -422,7 +424,10 @@ def _emit_collection_manifest(record: CollectionRecord) -> None:
 
 
 @app.command()
-def skills(search: str | None = None):
+def skills(
+    search: str | None = None,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
     """List available skills."""
     workspace = get_workspace_path()
     from medclaw.agent.skills import SkillsLoader
@@ -430,34 +435,41 @@ def skills(search: str | None = None):
     loader = SkillsLoader(workspace)
 
     if search:
-        results = loader.search_local_skills(search)
+        results = loader.search_local_skill_models(search)
+        if as_json:
+            _write_json(build_skill_list_response(results, query=search))
+            return
         console.print(f"[bold]Search results for '{search}':[/bold]")
         for r in results:
-            description = r.get("description", "")
-            source = r.get("source", "unknown")
-            reasons = r.get("reasons", "")
-            score = r.get("relevance_score")
-            suffix = f" [{source}]"
-            if score:
-                suffix += f" score={score}"
-            console.print(f"  - {r['name']}{suffix}: {description}")
-            if reasons:
-                console.print(f"      reasons: {reasons}")
+            suffix = f" [{r.source}]"
+            if r.relevance_score:
+                suffix += f" score={r.relevance_score}"
+            console.print(f"  - {r.name}{suffix}: {r.description}")
+            if r.reasons:
+                console.print(f"      reasons: {r.reasons}")
     else:
-        all_skills = loader.list_skills(filter_unavailable=False)
+        all_skills = loader.list_skill_models(filter_unavailable=False)
+        if as_json:
+            _write_json(build_skill_list_response(all_skills))
+            return
         console.print(f"[bold]Available Skills ({len(all_skills)}):[/bold]")
         for s in all_skills:
-            console.print(f"  - {s['name']} ({s['source']})")
+            console.print(f"  - {s.name} ({s.source})")
 
 
 @research_app.command("workflows")
-def research_workflows():
+def research_workflows(
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
     """List available typed research workflows."""
     use_cases = _get_research_use_cases()
-    workflows = use_cases.list_workflows()
+    workflows = use_cases.list_workflow_models()
+    if as_json:
+        _write_json(build_workflow_list_response(workflows))
+        return
     console.print("[bold]Research Workflows:[/bold]")
     for workflow in workflows:
-        console.print(f"  - {workflow['id']}: {workflow['title']}")
+        console.print(f"  - {workflow.id}: {workflow.title}")
 
 
 @research_app.command("run")

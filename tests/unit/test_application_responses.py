@@ -9,7 +9,10 @@ from medclaw.application.responses import (
     build_collection_response,
     build_research_report_list_response,
     build_research_report_response,
+    build_skill_list_response,
+    build_workflow_list_response,
 )
+from medclaw.application.query_models import SkillSummary, WorkflowSummary
 from medclaw.evidence.api_models import (
     artifact_record_from_dict,
     collection_manifest_from_dict,
@@ -120,3 +123,23 @@ class TestApplicationResponses:
         assert collection_manifest.model_dump(mode="json")["item"]["slug"] == "egfr-program"
         assert collection_record.model_dump(mode="json")["item"]["report_count"] == 1
         assert collection_list.model_dump(mode="json")["items"][0]["collection"] == "EGFR Program"
+
+    def test_build_workflow_and_skill_list_responses(self):
+        workflows = [WorkflowSummary(id="literature_review", title="Literature Review")]
+        skills = [
+            SkillSummary(
+                name="pubmed-search",
+                path="/tmp/pubmed-search/SKILL.md",
+                source="builtin",
+                description="Search PubMed",
+                relevance_score="15.0",
+                reasons="exact name match",
+            )
+        ]
+
+        workflow_response = build_workflow_list_response(workflows)
+        skill_response = build_skill_list_response(skills, query="pubmed")
+
+        assert workflow_response.model_dump(mode="json")["items"][0]["id"] == "literature_review"
+        assert skill_response.model_dump(mode="json")["items"][0]["name"] == "pubmed-search"
+        assert skill_response.model_dump(mode="json")["query"] == "pubmed"

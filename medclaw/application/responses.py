@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from medclaw.application.query_models import (
+    SkillListResponse,
+    SkillSummary,
+    WorkflowListResponse,
+    WorkflowSummary,
+)
 from medclaw.evidence.api_models import (
     ArtifactRecord,
     ArtifactListResponse,
@@ -113,3 +119,27 @@ def build_collection_list_response(
 def build_collection_response(record: CollectionRecord | CollectionManifest) -> CollectionResponse:
     """Build a typed single collection response."""
     return CollectionResponse(item=record)
+
+
+def build_workflow_summary(record: dict[str, str]) -> WorkflowSummary:
+    """Build a typed workflow summary."""
+    return WorkflowSummary.model_validate(record)
+
+
+def build_workflow_list_response(records: list[WorkflowSummary]) -> WorkflowListResponse:
+    """Build a typed workflow listing response."""
+    return WorkflowListResponse(items=records, total=len(records))
+
+
+def build_skill_summary(record: dict[str, str]) -> SkillSummary:
+    """Build a typed skill summary."""
+    return SkillSummary.model_validate(record)
+
+
+def build_skill_list_response(
+    records: list[SkillSummary],
+    *,
+    query: str | None = None,
+) -> SkillListResponse:
+    """Build a typed skill listing/search response."""
+    return SkillListResponse(items=records, total=len(records), query=query)

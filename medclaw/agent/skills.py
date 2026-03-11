@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from medclaw.application.query_models import SkillSummary
 
 BUILTIN_SKILLS_DIR = Path(__file__).parent.parent / "skills"
 
@@ -139,6 +140,19 @@ class SkillsLoader:
             available_tools=available_tools,
             runtime_only=True,
         )
+
+    def list_skill_models(
+        self,
+        filter_unavailable: bool = True,
+        available_tools: set[str] | None = None,
+        runtime_only: bool = False,
+    ) -> list[SkillSummary]:
+        """List available skills as typed models."""
+        return [SkillSummary.model_validate(skill) for skill in self.list_skills(
+            filter_unavailable=filter_unavailable,
+            available_tools=available_tools,
+            runtime_only=runtime_only,
+        )]
 
     def load_skill(self, name: str) -> str | None:
         """Load a skill by name."""
@@ -345,6 +359,21 @@ class SkillsLoader:
             available_tools=available_tools,
             runtime_only=runtime_only,
         )
+
+    def search_local_skill_models(
+        self,
+        text: str,
+        limit: int = 5,
+        available_tools: set[str] | None = None,
+        runtime_only: bool = False,
+    ) -> list[SkillSummary]:
+        """Search local skills and return typed summaries."""
+        return [SkillSummary.model_validate(skill) for skill in self.search_local_skills(
+            text,
+            limit=limit,
+            available_tools=available_tools,
+            runtime_only=runtime_only,
+        )]
 
     def suggest_skills_for_request(
         self,

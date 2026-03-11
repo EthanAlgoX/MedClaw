@@ -7,6 +7,7 @@ from pathlib import Path
 from medclaw.orchestrator.job_runner import ResearchOrchestrator
 from medclaw.orchestrator.router import ResearchRouter
 from medclaw.providers.base import LLMProvider
+from medclaw.application.query_models import WorkflowSummary
 
 
 class MedicalResearchUseCases:
@@ -106,6 +107,10 @@ class MedicalResearchUseCases:
     def list_workflows(self) -> list[dict[str, str]]:
         """List available typed workflows."""
         return self.orchestrator.list_workflows()
+
+    def list_workflow_models(self) -> list[WorkflowSummary]:
+        """List available typed workflows as typed models."""
+        return [WorkflowSummary.model_validate(workflow) for workflow in self.list_workflows()]
 
     def _resolve_collection_run_workflows(
         self,

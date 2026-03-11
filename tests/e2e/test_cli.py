@@ -96,6 +96,20 @@ class TestCLI:
         assert result.returncode == 0
         assert "Available Skills" in result.stdout or "Skill" in result.stdout
 
+    def test_skills_command_supports_json(self):
+        """Skills command should expose structured JSON output."""
+        result = subprocess.run(
+            ["medclaw", "skills", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["total"] >= 1
+        assert "name" in payload["items"][0]
+
     def test_skills_search_command(self):
         """Test skills search command."""
         result = subprocess.run(
@@ -107,6 +121,21 @@ class TestCLI:
 
         assert result.returncode == 0
         assert "RNA" in result.stdout or "Search" in result.stdout
+
+    def test_skills_search_command_supports_json(self):
+        """Skills search command should expose structured JSON output."""
+        result = subprocess.run(
+            ["medclaw", "skills", "--search", "pubmed", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["query"] == "pubmed"
+        assert payload["total"] >= 1
+        assert payload["items"][0]["name"]
 
     def test_onboard_command(self, tmp_path, monkeypatch):
         """Test onboard command creates workspace."""
@@ -163,6 +192,21 @@ class TestCLI:
         assert result.returncode == 0
         assert "literature_review" in result.stdout
         assert "clinical_trial_landscape" in result.stdout
+
+    def test_research_workflows_command_supports_json(self):
+        """Typed workflow listing should expose structured JSON output."""
+        result = subprocess.run(
+            ["medclaw", "research", "workflows", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["total"] >= 1
+        assert payload["items"][0]["id"]
+        assert payload["items"][0]["title"]
 
     def test_research_literature_review_help_includes_output_flags(self):
         """Typed workflow help should expose structured output options."""
