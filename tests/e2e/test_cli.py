@@ -881,11 +881,11 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert len(payload) == 1
-        assert payload[0]["collection"] == "KRAS Program"
-        assert payload[0]["report_count"] == 2
-        assert payload[0]["owner"] == "Translational Team"
-        assert payload[0]["latest_bundle_markdown_path"].endswith("bundle_summary.md")
+        assert payload["total"] == 1
+        assert payload["items"][0]["collection"] == "KRAS Program"
+        assert payload["items"][0]["report_count"] == 2
+        assert payload["items"][0]["owner"] == "Translational Team"
+        assert payload["items"][0]["latest_bundle_markdown_path"].endswith("bundle_summary.md")
 
     def test_research_collection_set_and_show_commands_manage_manifest(self, tmp_path, monkeypatch):
         """Research collection manifest commands should create and retrieve project metadata."""
@@ -922,7 +922,7 @@ class TestCLI:
 
         assert save_result.returncode == 0
         save_payload = json.loads(save_result.stdout)
-        assert save_payload["slug"] == "egfr-program"
+        assert save_payload["item"]["slug"] == "egfr-program"
 
         show_result = subprocess.run(
             ["medclaw", "research", "collection-show", "EGFR Program", "--json"],
@@ -933,9 +933,9 @@ class TestCLI:
 
         assert show_result.returncode == 0
         show_payload = json.loads(show_result.stdout)
-        assert show_payload["collection"] == "EGFR Program"
-        assert show_payload["owner"] == "Biomarker Team"
-        assert show_payload["preferred_workflows"] == ["evidence_brief", "literature_review"]
+        assert show_payload["item"]["collection"] == "EGFR Program"
+        assert show_payload["item"]["owner"] == "Biomarker Team"
+        assert show_payload["item"]["preferred_workflows"] == ["evidence_brief", "literature_review"]
 
     def test_research_show_summary_view_includes_collection_objective(self, tmp_path, monkeypatch):
         """Summary view should display collection objective when present in report metadata."""

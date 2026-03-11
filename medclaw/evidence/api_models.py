@@ -9,6 +9,19 @@ from pydantic import BaseModel, Field, TypeAdapter
 from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport
 
 
+class ResearchReportResponse(BaseModel):
+    """Typed single-report response."""
+
+    report: ResearchReport
+
+
+class ResearchReportListResponse(BaseModel):
+    """Typed multi-report response."""
+
+    items: list[ResearchReport]
+    total: int
+
+
 class ReportArtifactRecord(BaseModel):
     """Saved report artifact index record."""
 
@@ -100,6 +113,57 @@ class ArtifactPayloadListResponse(BaseModel):
     items: list[ArtifactPayloadResponse]
     total: int
     filters: ArtifactQueryFilters | None = None
+
+
+class CollectionManifest(BaseModel):
+    """Saved collection manifest payload."""
+
+    name: str
+    slug: str
+    objective: str = ""
+    disease_area: str = ""
+    owner: str = ""
+    tags: list[str] = Field(default_factory=list)
+    preferred_workflows: list[str] = Field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class CollectionRecord(BaseModel):
+    """Collection registry record with aggregate stats."""
+
+    collection: str
+    slug: str
+    objective: str = ""
+    disease_area: str = ""
+    owner: str = ""
+    tags: list[str] = Field(default_factory=list)
+    preferred_workflows: list[str] = Field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    report_count: int = 0
+    evidence_count: int = 0
+    citation_count: int = 0
+    latest_generated_at: str = ""
+    latest_bundle_generated_at: str = ""
+    latest_bundle_markdown_path: str = ""
+    latest_bundle_json_path: str = ""
+    workflows: list[str] = Field(default_factory=list)
+    titles: list[str] = Field(default_factory=list)
+
+
+class CollectionResponse(BaseModel):
+    """Typed single-collection response."""
+
+    item: CollectionRecord | CollectionManifest
+
+
+class CollectionListResponse(BaseModel):
+    """Typed collection list response."""
+
+    items: list[CollectionRecord]
+    total: int
+    limit: int
 
 
 def artifact_record_from_dict(record: dict[str, Any]) -> ArtifactRecord:

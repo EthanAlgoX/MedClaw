@@ -4,8 +4,13 @@ from medclaw.evidence.api_models import (
     ArtifactListResponse,
     ArtifactPayloadResponse,
     ArtifactQueryFilters,
+    CollectionListResponse,
+    CollectionResponse,
+    ResearchReportListResponse,
+    ResearchReportResponse,
     artifact_record_from_dict,
 )
+from medclaw.evidence.models import ResearchReport
 
 
 class TestArtifactApiModels:
@@ -92,3 +97,41 @@ class TestArtifactApiModels:
 
         assert list_response.model_dump(mode="json")["items"][0]["kind"] == "report"
         assert payload_response.model_dump(mode="json")["artifact"] == "citations"
+
+    def test_report_and_collection_response_models_dump_envelopes(self):
+        report = ResearchReport(
+            workflow_id="evidence_brief",
+            question="EGFR biomarkers",
+            title="Biomarker Brief",
+            summary="Summary",
+        )
+        report_response = ResearchReportResponse(report=report)
+        report_list_response = ResearchReportListResponse(items=[report], total=1)
+        collection_response = CollectionResponse(
+            item={
+                "collection": "EGFR Program",
+                "slug": "egfr-program",
+                "objective": "Track EGFR biomarker evidence",
+                "disease_area": "Thoracic oncology",
+                "owner": "Biomarker Team",
+                "tags": ["egfr"],
+                "preferred_workflows": ["evidence_brief"],
+                "created_at": "",
+                "updated_at": "",
+                "report_count": 1,
+                "evidence_count": 2,
+                "citation_count": 2,
+                "latest_generated_at": "2026-03-08T09:00:00+00:00",
+                "latest_bundle_generated_at": "",
+                "latest_bundle_markdown_path": "",
+                "latest_bundle_json_path": "",
+                "workflows": ["evidence_brief"],
+                "titles": ["Biomarker Brief"],
+            }
+        )
+        collection_list_response = CollectionListResponse(items=[collection_response.item], total=1, limit=20)
+
+        assert report_response.model_dump(mode="json")["report"]["workflow_id"] == "evidence_brief"
+        assert report_list_response.model_dump(mode="json")["total"] == 1
+        assert collection_response.model_dump(mode="json")["item"]["slug"] == "egfr-program"
+        assert collection_list_response.model_dump(mode="json")["items"][0]["collection"] == "EGFR Program"

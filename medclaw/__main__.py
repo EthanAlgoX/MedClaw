@@ -21,6 +21,12 @@ from medclaw.evidence.api_models import (
     ArtifactPayloadListResponse,
     ArtifactPayloadResponse,
     ArtifactQueryFilters,
+    CollectionListResponse,
+    CollectionManifest,
+    CollectionRecord,
+    CollectionResponse,
+    ResearchReportListResponse,
+    ResearchReportResponse,
     artifact_record_from_dict,
     artifact_records_from_dicts,
 )
@@ -234,7 +240,7 @@ def _emit_research_report(
         console.print(str(saved_path))
         return
     if as_json:
-        _write_json(report.model_dump(mode="json"))
+        _write_json(ResearchReportResponse(report=report))
         return
     from medclaw.reporting.briefs import render_research_report
 
@@ -255,7 +261,7 @@ def _emit_research_reports(
             console.print(str(bundle_saved_path))
         return
     if as_json:
-        _write_json([report.model_dump(mode="json") for report in reports])
+        _write_json(ResearchReportListResponse(items=reports, total=len(reports)))
         return
 
     if len(reports) > 1:
@@ -394,6 +400,35 @@ def _artifact_payload_list_response(
 ) -> ArtifactPayloadListResponse:
     """Build a typed resolved artifact payload list response."""
     return ArtifactPayloadListResponse(items=items, total=len(items), filters=filters)
+
+
+def _collection_record(record: dict) -> CollectionRecord:
+    """Build a typed collection registry record."""
+    return CollectionRecord.model_validate(record)
+
+
+def _collection_list_response(records: list[dict], *, limit: int) -> CollectionListResponse:
+    """Build a typed collection list response."""
+    return CollectionListResponse(
+        items=[_collection_record(record) for record in records],
+        total=len(records),
+        limit=limit,
+    )
+
+
+def _collection_response(record: dict) -> CollectionResponse:
+    """Build a typed single collection response."""
+    if {
+        "report_count",
+        "evidence_count",
+        "citation_count",
+        "workflows",
+        "titles",
+    }.issubset(record):
+        item = CollectionRecord.model_validate(record)
+    else:
+        item = CollectionManifest.model_validate(record)
+    return CollectionResponse(item=item)
 
 
 def _read_show_artifact(store: EvidenceStore, target: str, artifact: str) -> tuple[str, object]:
@@ -796,7 +831,7 @@ def research_collections(
     store = _get_evidence_store()
     records = store.list_collection_records(limit=limit)
     if as_json:
-        _write_json(records)
+        _write_json(_collection_list_response(records, limit=limit))
         return
 
     if not records:
@@ -853,7 +888,7 @@ def research_collection_set(
         raise typer.Exit(1)
 
     if as_json:
-        _write_json(record)
+        _write_json(_collection_response(record))
         return
 
     console.print(f"[green]Saved collection:[/green] {record['name']}")
@@ -893,7 +928,7 @@ def research_collection_show(
     )
 
     if as_json:
-        _write_json(merged)
+        _write_json(_collection_response(merged))
         return
 
     _emit_collection_manifest(merged)
