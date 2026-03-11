@@ -332,6 +332,35 @@ class EvidenceStore:
         """Aggregate saved reports by collection as typed models."""
         return collection_records_from_dicts(self.list_collection_records(limit=limit))
 
+    def get_collection_record_model(self, name_or_slug: str) -> CollectionRecord:
+        """Resolve one collection aggregate record, synthesizing an empty record if needed."""
+        manifest = self.load_collection_manifest_model(name_or_slug)
+        for record in self.list_collection_record_models(limit=1000):
+            if record.slug == manifest.slug:
+                return record
+        return collection_record_from_dict(
+            {
+                "collection": manifest.name,
+                "slug": manifest.slug,
+                "objective": manifest.objective,
+                "disease_area": manifest.disease_area,
+                "owner": manifest.owner,
+                "tags": manifest.tags,
+                "preferred_workflows": manifest.preferred_workflows,
+                "created_at": manifest.created_at,
+                "updated_at": manifest.updated_at,
+                "report_count": 0,
+                "evidence_count": 0,
+                "citation_count": 0,
+                "latest_generated_at": "",
+                "latest_bundle_generated_at": "",
+                "latest_bundle_markdown_path": "",
+                "latest_bundle_json_path": "",
+                "workflows": [],
+                "titles": [],
+            }
+        )
+
     def save_collection_bundle_artifacts(
         self,
         reports: list[ResearchReport],

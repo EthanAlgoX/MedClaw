@@ -516,3 +516,20 @@ class TestEvidenceStore:
         assert artifact_records[0].workflow_id == "evidence_brief"
         assert collection_manifest.slug == "egfr-program"
         assert collection_records[0].collection == "EGFR Program"
+
+    def test_get_collection_record_model_supports_manifest_without_reports(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="KRAS Program",
+            objective="Track KRAS evidence",
+            disease_area="Oncology",
+            owner="Translational Team",
+            tags=["kras"],
+            preferred_workflows=["literature_review"],
+        )
+
+        record = store.get_collection_record_model("KRAS Program")
+
+        assert record.collection == "KRAS Program"
+        assert record.report_count == 0
+        assert record.preferred_workflows == ["literature_review"]

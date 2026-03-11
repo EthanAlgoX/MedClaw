@@ -26,6 +26,7 @@ from medclaw.application import (
     build_research_report_list_response,
     build_research_report_response,
 )
+from medclaw.evidence.api_models import ArtifactRecord, CollectionBundleArtifactRecord, CollectionRecord
 from medclaw.evidence.artifacts import (
     CLI_ARTIFACTS,
     CLI_ARTIFACT_HELP,
@@ -280,14 +281,14 @@ def _write_json(payload) -> None:
     sys.stdout.write("\n")
 
 
-def _emit_artifact_record(record: dict, store: EvidenceStore) -> None:
+def _emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
     """Render a single artifact record into user-facing output."""
-    if record["kind"] == "collection_bundle":
-        markdown = store.read_bundle_artifact(record["id"], artifact="bundle_markdown")
+    if isinstance(record, CollectionBundleArtifactRecord):
+        markdown = store.read_bundle_artifact(record.id, artifact="bundle_markdown")
         console.print(Markdown(markdown))
         return
 
-    payload = store.read_artifact(record["id"], artifact="report")
+    payload = store.read_artifact(record.id, artifact="report")
     report_model = ResearchReport.model_validate(payload)
     _emit_research_report(report_model)
 
@@ -297,39 +298,39 @@ def _normalize_artifact_option(artifact: str | None) -> str | None:
     return normalize_artifact_name(artifact, choices=CLI_ARTIFACTS)
 
 
-def _artifact_paths_for_record(record: dict, store: EvidenceStore) -> dict[str, Path]:
+def _artifact_paths_for_record(record: ArtifactRecord, store: EvidenceStore) -> dict[str, Path]:
     """Return the artifact path bundle for a unified artifact record."""
-    if record["kind"] == "collection_bundle":
-        return store.get_bundle_artifact_paths(record["id"])
-    return store.get_artifact_paths(record["id"])
+    if isinstance(record, CollectionBundleArtifactRecord):
+        return store.get_bundle_artifact_paths(record.id)
+    return store.get_artifact_paths(record.id)
 
 
-def _artifact_payload_for_record(record: dict, store: EvidenceStore, artifact: str):
+def _artifact_payload_for_record(record: ArtifactRecord, store: EvidenceStore, artifact: str):
     """Read a specific artifact payload for a unified artifact record."""
-    supported = artifact_choices_for_kind(record["kind"])
+    supported = artifact_choices_for_kind(record.kind)
     if artifact not in supported:
-        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record["kind"])
-    if record["kind"] == "collection_bundle":
-        return store.read_bundle_artifact(record["id"], artifact=artifact)
-    return store.read_artifact(record["id"], artifact=artifact)
+        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record.kind)
+    if isinstance(record, CollectionBundleArtifactRecord):
+        return store.read_bundle_artifact(record.id, artifact=artifact)
+    return store.read_artifact(record.id, artifact=artifact)
 
 
-def _artifact_path_for_record(record: dict, store: EvidenceStore, artifact: str) -> str:
+def _artifact_path_for_record(record: ArtifactRecord, store: EvidenceStore, artifact: str) -> str:
     """Resolve a specific artifact path for a unified artifact record."""
-    supported = artifact_choices_for_kind(record["kind"])
+    supported = artifact_choices_for_kind(record.kind)
     if artifact not in supported:
-        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record["kind"])
+        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record.kind)
     paths = _artifact_paths_for_record(record, store)
     if artifact not in paths:
-        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record["kind"])
+        raise build_unsupported_artifact_error(artifact.replace("_", "-"), supported, kind=record.kind)
     return str(paths[artifact])
 
 
-def _artifact_primary_path(record: dict) -> str:
+def _artifact_primary_path(record: ArtifactRecord) -> str:
     """Return the primary file path for an artifact record."""
-    if record["kind"] == "collection_bundle":
-        return record.get("bundle_markdown_path", "")
-    return record.get("path", "")
+    if isinstance(record, CollectionBundleArtifactRecord):
+        return record.bundle_markdown_path
+    return record.path
 
 
 def _read_show_artifact(store: EvidenceStore, target: str, artifact: str) -> tuple[str, object]:
@@ -358,7 +359,7 @@ def _write_lines(lines: list[str]) -> None:
         sys.stdout.write("\n")
 
 
-def _emit_artifact_record_list(records: list[dict]) -> None:
+def _emit_artifact_record_list(records: list[ArtifactRecord]) -> None:
     """Render a compact list of artifact records."""
     if not records:
         console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
@@ -366,14 +367,14 @@ def _emit_artifact_record_list(records: list[dict]) -> None:
 
     console.print("[bold]Latest Research Artifacts:[/bold]")
     for record in records:
-        generated_at = record["generated_at"].split("T", 1)[0]
-        if record["kind"] == "collection_bundle":
+        generated_at = record.generated_at.split("T", 1)[0]
+        if isinstance(record, CollectionBundleArtifactRecord):
             console.print(
-                f"  - {record['collection']} [bundle] {generated_at} workflows={', '.join(record['workflow_ids'])}"
+                f"  - {record.collection} [bundle] {generated_at} workflows={', '.join(record.workflow_ids)}"
             )
         else:
             console.print(
-                f"  - {record['title']} [{record['workflow_id']}] {generated_at}"
+                f"  - {record.title} [{record.workflow_id}] {generated_at}"
             )
 
 
@@ -397,27 +398,27 @@ def _emit_report_summary(report: ResearchReport) -> None:
         console.print(f"summary: {' '.join(report.summary.split())}")
 
 
-def _emit_collection_manifest(record: dict) -> None:
+def _emit_collection_manifest(record: CollectionRecord) -> None:
     """Render a collection manifest with aggregate report stats."""
-    latest = record["latest_generated_at"].split("T", 1)[0] if record["latest_generated_at"] else "n/a"
-    console.print(f"[bold]{record['collection']}[/bold]")
-    console.print(f"slug: {record['slug']}")
-    console.print(f"reports: {record['report_count']}")
+    latest = record.latest_generated_at.split("T", 1)[0] if record.latest_generated_at else "n/a"
+    console.print(f"[bold]{record.collection}[/bold]")
+    console.print(f"slug: {record.slug}")
+    console.print(f"reports: {record.report_count}")
     console.print(f"latest: {latest}")
-    if record["owner"]:
-        console.print(f"owner: {record['owner']}")
-    if record["disease_area"]:
-        console.print(f"disease area: {record['disease_area']}")
-    if record["objective"]:
-        console.print(f"objective: {record['objective']}")
-    if record["tags"]:
-        console.print(f"tags: {', '.join(record['tags'])}")
-    if record["preferred_workflows"]:
-        console.print(f"preferred workflows: {', '.join(record['preferred_workflows'])}")
-    if record["workflows"]:
-        console.print(f"active workflows: {', '.join(record['workflows'])}")
-    if record.get("latest_bundle_markdown_path"):
-        console.print(f"latest bundle: {record['latest_bundle_markdown_path']}")
+    if record.owner:
+        console.print(f"owner: {record.owner}")
+    if record.disease_area:
+        console.print(f"disease area: {record.disease_area}")
+    if record.objective:
+        console.print(f"objective: {record.objective}")
+    if record.tags:
+        console.print(f"tags: {', '.join(record.tags)}")
+    if record.preferred_workflows:
+        console.print(f"preferred workflows: {', '.join(record.preferred_workflows)}")
+    if record.workflows:
+        console.print(f"active workflows: {', '.join(record.workflows)}")
+    if record.latest_bundle_markdown_path:
+        console.print(f"latest bundle: {record.latest_bundle_markdown_path}")
 
 
 @app.command()
@@ -546,22 +547,23 @@ def research_artifacts(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    typed_records = store.list_artifact_record_models(
+        query=search,
+        kind=kind,
+        workflow_id=workflow,
+        collection=collection,
+        since=since,
+        until=until,
+        latest=latest,
+        latest_by_collection=latest_by_collection,
+        limit=limit,
+    )
+
     if as_json:
-        typed_records = store.list_artifact_record_models(
-            query=search,
-            kind=kind,
-            workflow_id=workflow,
-            collection=collection,
-            since=since,
-            until=until,
-            latest=latest,
-            latest_by_collection=latest_by_collection,
-            limit=limit,
-        )
         _write_json(build_artifact_list_response(typed_records, filters))
         return
 
-    if not records:
+    if not typed_records:
         console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
         return
 
@@ -585,34 +587,34 @@ def research_artifacts(
     suffix = f" ({', '.join(filter_suffix)})" if filter_suffix else ""
 
     console.print(f"[bold]Research Artifacts{suffix}:[/bold]")
-    for record in records:
-        generated_at = record["generated_at"].split("T", 1)[0]
-        if record["kind"] == "collection_bundle":
+    for record in typed_records:
+        generated_at = record.generated_at.split("T", 1)[0]
+        if isinstance(record, CollectionBundleArtifactRecord):
             console.print(
                 "  - "
-                f"{record['id']} [bundle] "
-                f"date={generated_at} reports={record['report_count']} "
-                f"evidence={record['evidence_count']} citations={record['citation_count']}"
+                f"{record.id} [bundle] "
+                f"date={generated_at} reports={record.report_count} "
+                f"evidence={record.evidence_count} citations={record.citation_count}"
             )
-            if record["collection"]:
-                console.print(f"      collection: {record['collection']}")
-            console.print(f"      title: {record['title']}")
-            console.print(f"      workflows: {', '.join(record['workflow_ids'])}")
-            if record["summary_preview"]:
-                console.print(f"      summary: {record['summary_preview']}")
+            if record.collection:
+                console.print(f"      collection: {record.collection}")
+            console.print(f"      title: {record.title}")
+            console.print(f"      workflows: {', '.join(record.workflow_ids)}")
+            if record.summary_preview:
+                console.print(f"      summary: {record.summary_preview}")
             continue
 
         console.print(
             "  - "
-            f"{record['filename']} [{record['workflow_id']}] "
-            f"date={generated_at} evidence={record['evidence_count']} citations={record['citation_count']}"
+            f"{record.filename} [{record.workflow_id}] "
+            f"date={generated_at} evidence={record.evidence_count} citations={record.citation_count}"
         )
-        if record["collection"]:
-            console.print(f"      collection: {record['collection']}")
-        console.print(f"      title: {record['title']}")
-        console.print(f"      question: {record['question']}")
-        if record["summary_preview"]:
-            console.print(f"      summary: {record['summary_preview']}")
+        if record.collection:
+            console.print(f"      collection: {record.collection}")
+        console.print(f"      title: {record.title}")
+        console.print(f"      question: {record.question}")
+        if record.summary_preview:
+            console.print(f"      summary: {record.summary_preview}")
 
 
 @research_app.command("latest")
@@ -666,7 +668,16 @@ def research_latest(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if not records:
+    typed_records = store.list_artifact_record_models(
+        kind=kind,
+        workflow_id=workflow,
+        collection=collection,
+        latest=not by_collection,
+        latest_by_collection=by_collection,
+        limit=50 if by_collection else 1,
+    )
+
+    if not typed_records:
         console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
         return
 
@@ -676,7 +687,7 @@ def research_latest(
                 _artifact_path_for_record(record, store, normalized_artifact)
                 if normalized_artifact
                 else _artifact_primary_path(record)
-                for record in records
+                for record in typed_records
             ]
         except ValueError as e:
             console.print(f"[red]Error:[/red] {e}")
@@ -688,30 +699,22 @@ def research_latest(
         try:
             payloads = [
                 _artifact_payload_for_record(record, store, normalized_artifact)
-                for record in records
+                for record in typed_records
             ]
         except ValueError as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
 
         if as_json:
-            typed_records = store.list_artifact_record_models(
-                kind=kind,
-                workflow_id=workflow,
-                collection=collection,
-                latest=not by_collection,
-                latest_by_collection=by_collection,
-                limit=50 if by_collection else 1,
-            )
             items = [
                 build_artifact_payload_response(
                     target=record.id,
                     artifact=normalized_artifact,
                     record=record,
-                    path=_artifact_path_for_record(raw_record, store, normalized_artifact),
+                    path=_artifact_path_for_record(record, store, normalized_artifact),
                     payload=payload,
                 )
-                for raw_record, record, payload in zip(records, typed_records, payloads, strict=True)
+                for record, payload in zip(typed_records, payloads, strict=True)
             ]
             _write_json(build_artifact_payload_list_response(items, filters=filters))
             return
@@ -729,22 +732,14 @@ def research_latest(
         return
 
     if as_json:
-        typed_records = store.list_artifact_record_models(
-            kind=kind,
-            workflow_id=workflow,
-            collection=collection,
-            latest=not by_collection,
-            latest_by_collection=by_collection,
-            limit=50 if by_collection else 1,
-        )
         _write_json(build_artifact_list_response(typed_records, filters))
         return
 
     if by_collection and not show:
-        _emit_artifact_record_list(records)
+        _emit_artifact_record_list(typed_records)
         return
 
-    for index, record in enumerate(records):
+    for index, record in enumerate(typed_records):
         if index:
             console.print("\n---\n")
         _emit_artifact_record(record, store)
@@ -757,9 +752,9 @@ def research_collections(
 ):
     """List named research collections."""
     store = _get_evidence_store()
-    records = store.list_collection_records(limit=limit)
+    records = store.list_collection_record_models(limit=limit)
     if as_json:
-        _write_json(build_collection_list_response(store.list_collection_record_models(limit=limit), limit=limit))
+        _write_json(build_collection_list_response(records, limit=limit))
         return
 
     if not records:
@@ -768,22 +763,22 @@ def research_collections(
 
     console.print("[bold]Research Collections:[/bold]")
     for record in records:
-        latest = record["latest_generated_at"].split("T", 1)[0] if record["latest_generated_at"] else "n/a"
+        latest = record.latest_generated_at.split("T", 1)[0] if record.latest_generated_at else "n/a"
         console.print(
             "  - "
-            f"{record['collection']} reports={record['report_count']} "
-            f"evidence={record['evidence_count']} citations={record['citation_count']} latest={latest}"
+            f"{record.collection} reports={record.report_count} "
+            f"evidence={record.evidence_count} citations={record.citation_count} latest={latest}"
         )
-        if record["owner"]:
-            console.print(f"      owner: {record['owner']}")
-        if record["disease_area"]:
-            console.print(f"      disease area: {record['disease_area']}")
-        console.print(f"      workflows: {', '.join(record['workflows'])}")
-        if record["tags"]:
-            console.print(f"      tags: {', '.join(record['tags'])}")
-        console.print(f"      titles: {', '.join(record['titles'][:3])}")
-        if record["latest_bundle_markdown_path"]:
-            console.print(f"      latest bundle: {record['latest_bundle_markdown_path']}")
+        if record.owner:
+            console.print(f"      owner: {record.owner}")
+        if record.disease_area:
+            console.print(f"      disease area: {record.disease_area}")
+        console.print(f"      workflows: {', '.join(record.workflows)}")
+        if record.tags:
+            console.print(f"      tags: {', '.join(record.tags)}")
+        console.print(f"      titles: {', '.join(record.titles[:3])}")
+        if record.latest_bundle_markdown_path:
+            console.print(f"      latest bundle: {record.latest_bundle_markdown_path}")
 
 
 @research_app.command("collection-set")
@@ -803,7 +798,7 @@ def research_collection_set(
     """Create or update a research collection manifest."""
     store = _get_evidence_store()
     try:
-        record = store.save_collection_manifest(
+        store.save_collection_manifest(
             name=name,
             objective=objective,
             disease_area=disease_area,
@@ -815,12 +810,14 @@ def research_collection_set(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
+    saved_manifest = store.load_collection_manifest_model(name)
+
     if as_json:
-        _write_json(build_collection_response(store.load_collection_manifest_model(record["slug"])))
+        _write_json(build_collection_response(saved_manifest))
         return
 
-    console.print(f"[green]Saved collection:[/green] {record['name']}")
-    console.print(f"slug: {record['slug']}")
+    console.print(f"[green]Saved collection:[/green] {saved_manifest.name}")
+    console.print(f"slug: {saved_manifest.slug}")
 
 
 @research_app.command("collection-show")
@@ -831,53 +828,16 @@ def research_collection_show(
     """Show a research collection manifest with aggregate stats."""
     store = _get_evidence_store()
     try:
-        manifest = store.load_collection_manifest(name)
+        collection_record = store.get_collection_record_model(name)
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    collection_records = store.list_collection_records(limit=1000)
-    merged = next(
-        (
-            record
-            for record in collection_records
-            if record["slug"] == manifest["slug"]
-        ),
-        {
-            "collection": manifest["name"],
-            **manifest,
-            "report_count": 0,
-            "evidence_count": 0,
-            "citation_count": 0,
-            "latest_generated_at": "",
-            "workflows": [],
-            "titles": [],
-        },
-    )
-
     if as_json:
-        if {
-            "report_count",
-            "evidence_count",
-            "citation_count",
-            "workflows",
-            "titles",
-        }.issubset(merged):
-            typed_collection = next(
-                (
-                    record
-                    for record in store.list_collection_record_models(limit=1000)
-                    if record.slug == merged["slug"]
-                ),
-                None,
-            )
-            if typed_collection is not None:
-                _write_json(build_collection_response(typed_collection))
-                return
-        _write_json(build_collection_response(store.load_collection_manifest_model(name)))
+        _write_json(build_collection_response(collection_record))
         return
 
-    _emit_collection_manifest(merged)
+    _emit_collection_manifest(collection_record)
 
 
 @research_app.command("show")
@@ -911,7 +871,7 @@ def research_show(
                     target=report,
                     artifact=normalized_artifact,
                     record=record,
-                    path=_artifact_path_for_record(record.model_dump(mode="json"), store, normalized_artifact),
+                    path=_artifact_path_for_record(record, store, normalized_artifact),
                     payload=payload,
                 )
             )
@@ -925,7 +885,7 @@ def research_show(
                 target=report,
                 artifact=normalized_artifact,
                 record=record,
-                path=_artifact_path_for_record(record.model_dump(mode="json"), store, normalized_artifact),
+                path=_artifact_path_for_record(record, store, normalized_artifact),
                 payload=payload,
             )
         )
