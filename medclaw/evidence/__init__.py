@@ -25,6 +25,9 @@ from medclaw.evidence.api_models import (
     ResearchReportResponse,
     artifact_record_from_dict,
     artifact_records_from_dicts,
+    collection_manifest_from_dict,
+    collection_record_from_dict,
+    collection_records_from_dicts,
 )
 from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport
 from medclaw.evidence.store import EvidenceStore
@@ -53,6 +56,9 @@ __all__ = [
     "artifact_choices_for_kind",
     "artifact_record_from_dict",
     "artifact_records_from_dicts",
+    "collection_manifest_from_dict",
+    "collection_record_from_dict",
+    "collection_records_from_dicts",
     "build_unsupported_artifact_error",
     "format_artifact_choices",
     "normalize_artifact_name",

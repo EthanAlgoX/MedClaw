@@ -10,6 +10,11 @@ from medclaw.application.responses import (
     build_research_report_list_response,
     build_research_report_response,
 )
+from medclaw.evidence.api_models import (
+    artifact_record_from_dict,
+    collection_manifest_from_dict,
+    collection_record_from_dict,
+)
 from medclaw.evidence.models import ResearchReport
 
 
@@ -32,7 +37,8 @@ class TestApplicationResponses:
 
     def test_build_artifact_responses(self):
         filters = build_artifact_query_filters(kind="report", latest=True, limit=1)
-        record = {
+        record = artifact_record_from_dict(
+            {
             "kind": "report",
             "id": "report.json",
             "path": "/tmp/report.json",
@@ -46,7 +52,8 @@ class TestApplicationResponses:
             "citation_count": 1,
             "summary_preview": "Summary",
             "artifact_dir": "/tmp/report_artifacts",
-        }
+            }
+        )
         payload = [
             {
                 "source": "pubmed",
@@ -70,7 +77,8 @@ class TestApplicationResponses:
         assert artifact_payload_list.model_dump(mode="json")["total"] == 1
 
     def test_build_collection_responses(self):
-        manifest = {
+        manifest = collection_manifest_from_dict(
+            {
             "name": "EGFR Program",
             "slug": "egfr-program",
             "objective": "Track EGFR biomarker evidence",
@@ -80,8 +88,10 @@ class TestApplicationResponses:
             "preferred_workflows": ["evidence_brief"],
             "created_at": "",
             "updated_at": "",
-        }
-        record = {
+            }
+        )
+        record = collection_record_from_dict(
+            {
             "collection": "EGFR Program",
             "slug": "egfr-program",
             "objective": "Track EGFR biomarker evidence",
@@ -100,7 +110,8 @@ class TestApplicationResponses:
             "latest_bundle_json_path": "",
             "workflows": ["evidence_brief"],
             "titles": ["Biomarker Brief"],
-        }
+            }
+        )
 
         collection_manifest = build_collection_response(manifest)
         collection_record = build_collection_response(record)

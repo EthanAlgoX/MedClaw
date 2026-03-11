@@ -174,3 +174,18 @@ def artifact_record_from_dict(record: dict[str, Any]) -> ArtifactRecord:
 def artifact_records_from_dicts(records: list[dict[str, Any]]) -> list[ArtifactRecord]:
     """Validate a list of artifact records."""
     return _ARTIFACT_RECORD_LIST_ADAPTER.validate_python(records)
+
+
+def collection_manifest_from_dict(record: dict[str, Any]) -> CollectionManifest:
+    """Validate one collection manifest."""
+    return CollectionManifest.model_validate(record)
+
+
+def collection_record_from_dict(record: dict[str, Any]) -> CollectionRecord:
+    """Validate one collection record."""
+    return CollectionRecord.model_validate(record)
+
+
+def collection_records_from_dicts(records: list[dict[str, Any]]) -> list[CollectionRecord]:
+    """Validate a list of collection records."""
+    return [collection_record_from_dict(record) for record in records]

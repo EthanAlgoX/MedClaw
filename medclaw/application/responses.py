@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from medclaw.evidence.api_models import (
+    ArtifactRecord,
     ArtifactListResponse,
     ArtifactPayloadListResponse,
     ArtifactPayloadResponse,
@@ -13,8 +14,6 @@ from medclaw.evidence.api_models import (
     CollectionResponse,
     ResearchReportListResponse,
     ResearchReportResponse,
-    artifact_record_from_dict,
-    artifact_records_from_dicts,
 )
 from medclaw.evidence.models import ResearchReport
 
@@ -56,12 +55,12 @@ def build_artifact_query_filters(
 
 
 def build_artifact_list_response(
-    records: list[dict],
+    records: list[ArtifactRecord],
     filters: ArtifactQueryFilters,
 ) -> ArtifactListResponse:
     """Build a typed artifact list response."""
     return ArtifactListResponse(
-        items=artifact_records_from_dicts(records),
+        items=records,
         total=len(records),
         filters=filters,
     )
@@ -71,7 +70,7 @@ def build_artifact_payload_response(
     *,
     target: str,
     artifact: str,
-    record: dict | None,
+    record: ArtifactRecord | None,
     path: str,
     payload,
 ) -> ArtifactPayloadResponse:
@@ -81,10 +80,10 @@ def build_artifact_payload_response(
     return ArtifactPayloadResponse(
         target=target,
         artifact=artifact,
-        kind=record["kind"] if record else "",
+        kind=record.kind if record else "",
         path=path,
         format="markdown" if artifact == "bundle_markdown" else "json",
-        record=artifact_record_from_dict(record) if record else None,
+        record=record,
         payload=payload,
     )
 
@@ -98,34 +97,19 @@ def build_artifact_payload_list_response(
     return ArtifactPayloadListResponse(items=items, total=len(items), filters=filters)
 
 
-def build_collection_record(record: dict) -> CollectionRecord:
-    """Build a typed collection registry record."""
-    return CollectionRecord.model_validate(record)
-
-
 def build_collection_list_response(
-    records: list[dict],
+    records: list[CollectionRecord],
     *,
     limit: int,
 ) -> CollectionListResponse:
     """Build a typed collection list response."""
     return CollectionListResponse(
-        items=[build_collection_record(record) for record in records],
+        items=records,
         total=len(records),
         limit=limit,
     )
 
 
-def build_collection_response(record: dict) -> CollectionResponse:
+def build_collection_response(record: CollectionRecord | CollectionManifest) -> CollectionResponse:
     """Build a typed single collection response."""
-    if {
-        "report_count",
-        "evidence_count",
-        "citation_count",
-        "workflows",
-        "titles",
-    }.issubset(record):
-        item = CollectionRecord.model_validate(record)
-    else:
-        item = CollectionManifest.model_validate(record)
-    return CollectionResponse(item=item)
+    return CollectionResponse(item=record)

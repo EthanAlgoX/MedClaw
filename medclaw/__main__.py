@@ -547,7 +547,18 @@ def research_artifacts(
         raise typer.Exit(1)
 
     if as_json:
-        _write_json(build_artifact_list_response(records, filters))
+        typed_records = store.list_artifact_record_models(
+            query=search,
+            kind=kind,
+            workflow_id=workflow,
+            collection=collection,
+            since=since,
+            until=until,
+            latest=latest,
+            latest_by_collection=latest_by_collection,
+            limit=limit,
+        )
+        _write_json(build_artifact_list_response(typed_records, filters))
         return
 
     if not records:
@@ -684,15 +695,23 @@ def research_latest(
             raise typer.Exit(1)
 
         if as_json:
+            typed_records = store.list_artifact_record_models(
+                kind=kind,
+                workflow_id=workflow,
+                collection=collection,
+                latest=not by_collection,
+                latest_by_collection=by_collection,
+                limit=50 if by_collection else 1,
+            )
             items = [
                 build_artifact_payload_response(
-                    target=record["id"],
+                    target=record.id,
                     artifact=normalized_artifact,
                     record=record,
-                    path=_artifact_path_for_record(record, store, normalized_artifact),
+                    path=_artifact_path_for_record(raw_record, store, normalized_artifact),
                     payload=payload,
                 )
-                for record, payload in zip(records, payloads, strict=True)
+                for raw_record, record, payload in zip(records, typed_records, payloads, strict=True)
             ]
             _write_json(build_artifact_payload_list_response(items, filters=filters))
             return
@@ -710,7 +729,15 @@ def research_latest(
         return
 
     if as_json:
-        _write_json(build_artifact_list_response(records, filters))
+        typed_records = store.list_artifact_record_models(
+            kind=kind,
+            workflow_id=workflow,
+            collection=collection,
+            latest=not by_collection,
+            latest_by_collection=by_collection,
+            limit=50 if by_collection else 1,
+        )
+        _write_json(build_artifact_list_response(typed_records, filters))
         return
 
     if by_collection and not show:
@@ -732,7 +759,7 @@ def research_collections(
     store = _get_evidence_store()
     records = store.list_collection_records(limit=limit)
     if as_json:
-        _write_json(build_collection_list_response(records, limit=limit))
+        _write_json(build_collection_list_response(store.list_collection_record_models(limit=limit), limit=limit))
         return
 
     if not records:
@@ -789,7 +816,7 @@ def research_collection_set(
         raise typer.Exit(1)
 
     if as_json:
-        _write_json(build_collection_response(record))
+        _write_json(build_collection_response(store.load_collection_manifest_model(record["slug"])))
         return
 
     console.print(f"[green]Saved collection:[/green] {record['name']}")
@@ -829,7 +856,25 @@ def research_collection_show(
     )
 
     if as_json:
-        _write_json(build_collection_response(merged))
+        if {
+            "report_count",
+            "evidence_count",
+            "citation_count",
+            "workflows",
+            "titles",
+        }.issubset(merged):
+            typed_collection = next(
+                (
+                    record
+                    for record in store.list_collection_record_models(limit=1000)
+                    if record.slug == merged["slug"]
+                ),
+                None,
+            )
+            if typed_collection is not None:
+                _write_json(build_collection_response(typed_collection))
+                return
+        _write_json(build_collection_response(store.load_collection_manifest_model(name)))
         return
 
     _emit_collection_manifest(merged)
@@ -854,7 +899,7 @@ def research_show(
     store = _get_evidence_store()
     try:
         normalized_artifact, payload = _read_show_artifact(store, report, artifact)
-        record = store.get_artifact_record(report)
+        record = store.get_artifact_record_model(report)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -866,7 +911,7 @@ def research_show(
                     target=report,
                     artifact=normalized_artifact,
                     record=record,
-                    path=_artifact_path_for_record(record, store, normalized_artifact),
+                    path=_artifact_path_for_record(record.model_dump(mode="json"), store, normalized_artifact),
                     payload=payload,
                 )
             )
@@ -880,7 +925,7 @@ def research_show(
                 target=report,
                 artifact=normalized_artifact,
                 record=record,
-                path=_artifact_path_for_record(record, store, normalized_artifact),
+                path=_artifact_path_for_record(record.model_dump(mode="json"), store, normalized_artifact),
                 payload=payload,
             )
         )

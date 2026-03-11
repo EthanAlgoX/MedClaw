@@ -13,6 +13,16 @@ from medclaw.evidence.artifacts import (
     build_unsupported_artifact_error,
     normalize_artifact_name,
 )
+from medclaw.evidence.api_models import (
+    ArtifactRecord,
+    CollectionManifest,
+    CollectionRecord,
+    artifact_record_from_dict,
+    artifact_records_from_dicts,
+    collection_manifest_from_dict,
+    collection_record_from_dict,
+    collection_records_from_dicts,
+)
 from medclaw.evidence.models import Citation, ResearchReport
 
 
@@ -318,6 +328,10 @@ class EvidenceStore:
         )
         return ordered[:limit]
 
+    def list_collection_record_models(self, limit: int = 50) -> list[CollectionRecord]:
+        """Aggregate saved reports by collection as typed models."""
+        return collection_records_from_dicts(self.list_collection_records(limit=limit))
+
     def save_collection_bundle_artifacts(
         self,
         reports: list[ResearchReport],
@@ -486,6 +500,10 @@ class EvidenceStore:
 
         raise FileNotFoundError(f"Could not find research collection: {name_or_slug}")
 
+    def load_collection_manifest_model(self, name_or_slug: str) -> CollectionManifest:
+        """Load a collection manifest as a typed model."""
+        return collection_manifest_from_dict(self.load_collection_manifest(name_or_slug))
+
     def list_collection_manifests(self, limit: int = 50) -> list[dict[str, Any]]:
         """List saved collection manifests, newest first."""
         manifests = []
@@ -584,6 +602,37 @@ class EvidenceStore:
                 return self._bundle_record(payload)
             except (FileNotFoundError, ValueError):
                 raise report_error
+
+    def get_artifact_record_model(self, path: Path | str) -> ArtifactRecord:
+        """Resolve a saved report or bundle into a typed artifact record."""
+        return artifact_record_from_dict(self.get_artifact_record(path))
+
+    def list_artifact_record_models(
+        self,
+        query: str | None = None,
+        kind: str | None = None,
+        workflow_id: str | None = None,
+        collection: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        latest: bool = False,
+        latest_by_collection: bool = False,
+        limit: int = 50,
+    ) -> list[ArtifactRecord]:
+        """List saved report and bundle artifacts as typed models."""
+        return artifact_records_from_dicts(
+            self.list_artifact_records(
+                query=query,
+                kind=kind,
+                workflow_id=workflow_id,
+                collection=collection,
+                since=since,
+                until=until,
+                latest=latest,
+                latest_by_collection=latest_by_collection,
+                limit=limit,
+            )
+        )
 
     def _build_report_path(self, report: ResearchReport) -> Path:
         """Build a timestamped report path."""

@@ -487,3 +487,32 @@ class TestEvidenceStore:
         assert markdown_payload.startswith("# Collection Brief: KRAS Program")
         assert json_payload["kind"] == "collection_bundle"
         assert json_payload["collection"] == "KRAS Program"
+
+    def test_store_can_return_typed_artifact_and_collection_models(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="EGFR Program",
+            objective="Track EGFR biomarker evidence",
+            disease_area="Thoracic oncology",
+            owner="Biomarker Team",
+            tags=["egfr"],
+            preferred_workflows=["evidence_brief"],
+        )
+        report = ResearchReport(
+            workflow_id="evidence_brief",
+            question="EGFR biomarkers",
+            title="EGFR Biomarker Brief",
+            summary="Summary",
+            metadata={"collection": "EGFR Program"},
+        )
+        artifact_paths = store.save_report_artifacts(report)
+
+        artifact_record = store.get_artifact_record_model(artifact_paths["report"].name)
+        artifact_records = store.list_artifact_record_models(kind="report", limit=10)
+        collection_manifest = store.load_collection_manifest_model("EGFR Program")
+        collection_records = store.list_collection_record_models(limit=10)
+
+        assert artifact_record.kind == "report"
+        assert artifact_records[0].workflow_id == "evidence_brief"
+        assert collection_manifest.slug == "egfr-program"
+        assert collection_records[0].collection == "EGFR Program"
