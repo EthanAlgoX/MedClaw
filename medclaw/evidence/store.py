@@ -158,6 +158,7 @@ class EvidenceStore:
     def list_artifact_records(
         self,
         query: str | None = None,
+        kind: str | None = None,
         workflow_id: str | None = None,
         collection: str | None = None,
         since: str | None = None,
@@ -165,22 +166,30 @@ class EvidenceStore:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """List saved report and bundle artifacts under a unified index."""
-        report_records = self.filter_report_records(
-            query=query,
-            workflow_id=workflow_id,
-            collection=collection,
-            since=since,
-            until=until,
-            limit=limit * 2,
-        )
-        bundle_records = self.filter_collection_bundle_records(
-            query=query,
-            workflow_id=workflow_id,
-            collection=collection,
-            since=since,
-            until=until,
-            limit=limit * 2,
-        )
+        normalized_kind = self._normalize_artifact_kind(kind)
+        include_reports = normalized_kind in {"all", "report"}
+        include_bundles = normalized_kind in {"all", "collection_bundle"}
+
+        report_records: list[dict[str, Any]] = []
+        bundle_records: list[dict[str, Any]] = []
+        if include_reports:
+            report_records = self.filter_report_records(
+                query=query,
+                workflow_id=workflow_id,
+                collection=collection,
+                since=since,
+                until=until,
+                limit=limit * 2,
+            )
+        if include_bundles:
+            bundle_records = self.filter_collection_bundle_records(
+                query=query,
+                workflow_id=workflow_id,
+                collection=collection,
+                since=since,
+                until=until,
+                limit=limit * 2,
+            )
         records = report_records + bundle_records
         records.sort(key=lambda record: (record["generated_at"], record["kind"]), reverse=True)
         return records[:limit]
@@ -683,6 +692,24 @@ class EvidenceStore:
         if not slug:
             raise ValueError("Collection name must include letters or numbers")
         return slug
+
+    def _normalize_artifact_kind(self, kind: str | None) -> str:
+        """Normalize artifact kind filter values."""
+        if kind is None:
+            return "all"
+        normalized = kind.strip().lower().replace("-", "_")
+        aliases = {
+            "all": "all",
+            "report": "report",
+            "reports": "report",
+            "bundle": "collection_bundle",
+            "bundles": "collection_bundle",
+            "collection_bundle": "collection_bundle",
+        }
+        if normalized not in aliases:
+            supported = ", ".join(sorted(aliases))
+            raise ValueError(f"Unsupported artifact kind '{kind}'. Choose from: {supported}")
+        return aliases[normalized]
 
     def resolve_bundle_artifact_dir(self, path: Path | str) -> Path:
         """Resolve a collection bundle artifact directory from an id, dir, or file path."""

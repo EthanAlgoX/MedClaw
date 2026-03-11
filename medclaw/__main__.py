@@ -386,6 +386,7 @@ def research_run(
 @research_app.command("artifacts")
 def research_artifacts(
     search: str | None = typer.Option(None, "--search", help="Filter saved reports by text."),
+    kind: str | None = typer.Option(None, "--kind", help="Artifact kind: report or bundle."),
     workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
     collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
     since: str | None = typer.Option(None, "--since", help="Only include reports on/after YYYY-MM-DD."),
@@ -398,6 +399,7 @@ def research_artifacts(
     try:
         records = store.list_artifact_records(
             query=search,
+            kind=kind,
             workflow_id=workflow,
             collection=collection,
             since=since,
@@ -417,6 +419,8 @@ def research_artifacts(
         return
 
     filter_suffix = []
+    if kind:
+        filter_suffix.append(f"kind={kind}")
     if workflow:
         filter_suffix.append(f"workflow={workflow}")
     if collection:

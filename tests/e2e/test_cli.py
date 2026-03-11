@@ -194,6 +194,18 @@ class TestCLI:
         assert "--all-preferred" in result.stdout
         assert "--no-llm" in result.stdout
 
+    def test_research_artifacts_help_includes_kind_filter(self):
+        """Artifact listing help should expose the kind filter."""
+        result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert result.returncode == 0
+        assert "--kind" in result.stdout
+
     def test_research_artifacts_command_lists_saved_reports(self, tmp_path, monkeypatch):
         """Research artifacts command should list stored report records."""
         test_home = tmp_path / "test_home"
@@ -252,6 +264,63 @@ class TestCLI:
         assert len(payload) == 1
         assert payload[0]["kind"] == "collection_bundle"
         assert payload[0]["title"] == "Collection Brief: KRAS Program"
+
+    def test_research_artifacts_command_can_filter_by_kind(self, tmp_path, monkeypatch):
+        """Research artifacts command should separate reports and bundles by kind."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="evidence_brief",
+            title="KRAS Biomarker Brief",
+            question="KRAS biomarkers",
+            summary="Summary",
+            generated_at="2026-03-06T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        report_result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--kind", "report", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        bundle_result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--kind", "bundle", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert report_result.returncode == 0
+        assert bundle_result.returncode == 0
+        report_payload = json.loads(report_result.stdout)
+        bundle_payload = json.loads(bundle_result.stdout)
+        assert len(report_payload) == 1
+        assert report_payload[0]["kind"] == "report"
+        assert len(bundle_payload) == 1
+        assert bundle_payload[0]["kind"] == "collection_bundle"
 
     def test_research_artifacts_command_supports_search(self, tmp_path, monkeypatch):
         """Research artifacts command should filter reports by search text."""
