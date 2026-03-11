@@ -573,6 +573,18 @@ class EvidenceStore:
             return target.read_text(encoding="utf-8")
         return json.loads(target.read_text(encoding="utf-8"))
 
+    def get_artifact_record(self, path: Path | str) -> dict[str, Any]:
+        """Resolve a saved report or bundle into its unified index record."""
+        try:
+            report_path = self.resolve_report_path(path)
+            return self._report_record(report_path, self.load_report(report_path))
+        except FileNotFoundError as report_error:
+            try:
+                payload = self.read_bundle_artifact(path, artifact="metadata")
+                return self._bundle_record(payload)
+            except (FileNotFoundError, ValueError):
+                raise report_error
+
     def _build_report_path(self, report: ResearchReport) -> Path:
         """Build a timestamped report path."""
         slug = report.workflow_id.replace("/", "-").replace("_", "-")

@@ -241,9 +241,9 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert len(payload) == 1
-        assert payload[0]["workflow_id"] == "literature_review"
-        assert payload[0]["filename"] == report_path.name
+        assert payload["total"] == 1
+        assert payload["items"][0]["workflow_id"] == "literature_review"
+        assert payload["items"][0]["filename"] == report_path.name
 
     def test_research_artifacts_command_lists_collection_bundles(self, tmp_path, monkeypatch):
         """Research artifacts command should include collection bundle records."""
@@ -280,9 +280,9 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert len(payload) == 1
-        assert payload[0]["kind"] == "collection_bundle"
-        assert payload[0]["title"] == "Collection Brief: KRAS Program"
+        assert payload["total"] == 1
+        assert payload["items"][0]["kind"] == "collection_bundle"
+        assert payload["items"][0]["title"] == "Collection Brief: KRAS Program"
 
     def test_research_artifacts_command_can_filter_by_kind(self, tmp_path, monkeypatch):
         """Research artifacts command should separate reports and bundles by kind."""
@@ -336,10 +336,10 @@ class TestCLI:
         assert bundle_result.returncode == 0
         report_payload = json.loads(report_result.stdout)
         bundle_payload = json.loads(bundle_result.stdout)
-        assert len(report_payload) == 1
-        assert report_payload[0]["kind"] == "report"
-        assert len(bundle_payload) == 1
-        assert bundle_payload[0]["kind"] == "collection_bundle"
+        assert report_payload["total"] == 1
+        assert report_payload["items"][0]["kind"] == "report"
+        assert bundle_payload["total"] == 1
+        assert bundle_payload["items"][0]["kind"] == "collection_bundle"
 
     def test_research_artifacts_command_supports_latest_views(self, tmp_path, monkeypatch):
         """Artifact listing should support latest overall and latest per collection views."""
@@ -404,10 +404,10 @@ class TestCLI:
         assert latest_by_collection_result.returncode == 0
         latest_payload = json.loads(latest_result.stdout)
         latest_by_collection_payload = json.loads(latest_by_collection_result.stdout)
-        assert len(latest_payload) == 1
-        assert latest_payload[0]["kind"] == "collection_bundle"
-        assert len(latest_by_collection_payload) == 2
-        assert {item["collection"] for item in latest_by_collection_payload} == {"KRAS Program", "EGFR Program"}
+        assert latest_payload["total"] == 1
+        assert latest_payload["items"][0]["kind"] == "collection_bundle"
+        assert latest_by_collection_payload["total"] == 2
+        assert {item["collection"] for item in latest_by_collection_payload["items"]} == {"KRAS Program", "EGFR Program"}
 
     def test_research_latest_command_shows_latest_artifact_content(self, tmp_path, monkeypatch):
         """Latest shortcut should render the newest artifact content directly."""
@@ -663,7 +663,9 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert payload[0]["identifier"] == "PMID:1"
+        assert payload["total"] == 1
+        assert payload["items"][0]["artifact"] == "citations"
+        assert payload["items"][0]["payload"][0]["identifier"] == "PMID:1"
 
     def test_research_latest_command_rejects_incompatible_artifact_for_bundle(self, tmp_path, monkeypatch):
         """Latest shortcut should fail cleanly when artifact kind does not match the latest record."""
@@ -727,8 +729,8 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert len(payload) == 1
-        assert payload[0]["title"] == "KRAS G12C Review"
+        assert payload["total"] == 1
+        assert payload["items"][0]["title"] == "KRAS G12C Review"
 
     def test_research_artifacts_command_supports_workflow_and_date_filters(self, tmp_path, monkeypatch):
         """Research artifacts command should filter by workflow and generated date."""
@@ -771,9 +773,9 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert len(payload) == 1
-        assert payload[0]["workflow_id"] == "study_design"
-        assert payload[0]["generated_at"] == "2026-03-06T09:00:00+00:00"
+        assert payload["total"] == 1
+        assert payload["items"][0]["workflow_id"] == "study_design"
+        assert payload["items"][0]["generated_at"] == "2026-03-06T09:00:00+00:00"
 
     def test_research_artifacts_command_supports_collection_filter(self, tmp_path, monkeypatch):
         """Research artifacts command should filter reports by collection."""
@@ -815,8 +817,8 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert len(payload) == 1
-        assert payload[0]["collection"] == "KRAS Program"
+        assert payload["total"] == 1
+        assert payload["items"][0]["collection"] == "KRAS Program"
 
     def test_research_collections_command_lists_named_groups(self, tmp_path, monkeypatch):
         """Research collections command should aggregate reports by collection."""
@@ -1003,7 +1005,8 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert payload[0]["identifier"] == "PMID:1"
+        assert payload["artifact"] == "citations"
+        assert payload["payload"][0]["identifier"] == "PMID:1"
 
     def test_research_show_command_can_display_bundle_markdown_by_default(self, tmp_path, monkeypatch):
         """Research show command should auto-display bundle markdown when given a bundle id."""
@@ -1084,8 +1087,9 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert payload["kind"] == "collection_bundle"
-        assert payload["collection"] == "KRAS Program"
+        assert payload["artifact"] == "bundle_json"
+        assert payload["payload"]["kind"] == "collection_bundle"
+        assert payload["payload"]["collection"] == "KRAS Program"
 
     def test_research_show_command_can_return_bundle_metadata(self, tmp_path, monkeypatch):
         """Research show command should resolve shared metadata artifacts for bundle ids."""
@@ -1130,8 +1134,9 @@ class TestCLI:
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
-        assert payload["kind"] == "collection_bundle"
-        assert payload["collection"] == "KRAS Program"
+        assert payload["artifact"] == "metadata"
+        assert payload["payload"]["kind"] == "collection_bundle"
+        assert payload["payload"]["collection"] == "KRAS Program"
 
     def test_research_show_command_supports_summary_view(self, tmp_path, monkeypatch):
         """Research show command should render a compact summary view."""

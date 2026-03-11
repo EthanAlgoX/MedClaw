@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import typer
+from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -15,6 +16,14 @@ from rich.panel import Panel
 from medclaw import __version__
 from medclaw.agent.loop import AgentLoop
 from medclaw.application.use_cases import MedicalResearchUseCases
+from medclaw.evidence.api_models import (
+    ArtifactListResponse,
+    ArtifactPayloadListResponse,
+    ArtifactPayloadResponse,
+    ArtifactQueryFilters,
+    artifact_record_from_dict,
+    artifact_records_from_dicts,
+)
 from medclaw.evidence.artifacts import (
     CLI_ARTIFACTS,
     CLI_ARTIFACT_HELP,
@@ -263,6 +272,8 @@ def _emit_research_reports(
 
 def _write_json(payload) -> None:
     """Write machine-readable JSON without terminal wrapping."""
+    if isinstance(payload, BaseModel):
+        payload = payload.model_dump(mode="json")
     sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
     sys.stdout.write("\n")
 
@@ -317,6 +328,72 @@ def _artifact_primary_path(record: dict) -> str:
     if record["kind"] == "collection_bundle":
         return record.get("bundle_markdown_path", "")
     return record.get("path", "")
+
+
+def _artifact_query_filters(
+    *,
+    query: str | None = None,
+    kind: str | None = None,
+    workflow_id: str | None = None,
+    collection: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    latest: bool = False,
+    latest_by_collection: bool = False,
+    limit: int = 50,
+) -> ArtifactQueryFilters:
+    """Build typed artifact filter metadata."""
+    return ArtifactQueryFilters(
+        query=query,
+        kind=kind,
+        workflow_id=workflow_id,
+        collection=collection,
+        since=since,
+        until=until,
+        latest=latest,
+        latest_by_collection=latest_by_collection,
+        limit=limit,
+    )
+
+
+def _artifact_list_response(records: list[dict], filters: ArtifactQueryFilters) -> ArtifactListResponse:
+    """Build a typed artifact list response."""
+    return ArtifactListResponse(
+        items=artifact_records_from_dicts(records),
+        total=len(records),
+        filters=filters,
+    )
+
+
+def _artifact_payload_response(
+    *,
+    target: str,
+    artifact: str,
+    record: dict | None,
+    path: str,
+    payload,
+) -> ArtifactPayloadResponse:
+    """Build a typed resolved artifact payload response."""
+    if artifact == "report":
+        payload = ResearchReport.model_validate(payload)
+    return ArtifactPayloadResponse(
+        target=target,
+        artifact=artifact,
+        kind=record["kind"] if record else "",
+        path=path,
+        format="markdown" if artifact == "bundle_markdown" else "json",
+        record=artifact_record_from_dict(record) if record else None,
+        payload=payload,
+    )
+
+
+def _artifact_payload_list_response(
+    items: list[ArtifactPayloadResponse],
+    *,
+    filters: ArtifactQueryFilters | None = None,
+) -> ArtifactPayloadListResponse:
+    """Build a typed resolved artifact payload list response."""
+    return ArtifactPayloadListResponse(items=items, total=len(items), filters=filters)
 
 
 def _read_show_artifact(store: EvidenceStore, target: str, artifact: str) -> tuple[str, object]:
@@ -506,6 +583,17 @@ def research_artifacts(
 ):
     """List saved research reports and collection bundles."""
     store = _get_evidence_store()
+    filters = _artifact_query_filters(
+        query=search,
+        kind=kind,
+        workflow_id=workflow,
+        collection=collection,
+        since=since,
+        until=until,
+        latest=latest,
+        latest_by_collection=latest_by_collection,
+        limit=limit,
+    )
     try:
         records = store.list_artifact_records(
             query=search,
@@ -523,7 +611,7 @@ def research_artifacts(
         raise typer.Exit(1)
 
     if as_json:
-        _write_json(records)
+        _write_json(_artifact_list_response(records, filters))
         return
 
     if not records:
@@ -609,6 +697,14 @@ def research_latest(
 ):
     """Show the latest saved research artifact."""
     store = _get_evidence_store()
+    filters = _artifact_query_filters(
+        kind=kind,
+        workflow_id=workflow,
+        collection=collection,
+        latest=not by_collection,
+        latest_by_collection=by_collection,
+        limit=50 if by_collection else 1,
+    )
     try:
         normalized_artifact = _normalize_artifact_option(artifact)
         records = store.list_artifact_records(
@@ -652,8 +748,17 @@ def research_latest(
             raise typer.Exit(1)
 
         if as_json:
-            payload = payloads if by_collection else payloads[0]
-            _write_json(payload)
+            items = [
+                _artifact_payload_response(
+                    target=record["id"],
+                    artifact=normalized_artifact,
+                    record=record,
+                    path=_artifact_path_for_record(record, store, normalized_artifact),
+                    payload=payload,
+                )
+                for record, payload in zip(records, payloads, strict=True)
+            ]
+            _write_json(_artifact_payload_list_response(items, filters=filters))
             return
 
         for index, payload in enumerate(payloads):
@@ -669,8 +774,7 @@ def research_latest(
         return
 
     if as_json:
-        payload = records if by_collection else records[0]
-        _write_json(payload)
+        _write_json(_artifact_list_response(records, filters))
         return
 
     if by_collection and not show:
@@ -814,19 +918,36 @@ def research_show(
     store = _get_evidence_store()
     try:
         normalized_artifact, payload = _read_show_artifact(store, report, artifact)
+        record = store.get_artifact_record(report)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
     if normalized_artifact == "bundle_markdown":
         if as_json:
-            _write_json({"markdown": payload})
+            _write_json(
+                _artifact_payload_response(
+                    target=report,
+                    artifact=normalized_artifact,
+                    record=record,
+                    path=_artifact_path_for_record(record, store, normalized_artifact),
+                    payload=payload,
+                )
+            )
             return
         console.print(Markdown(payload))
         return
 
     if as_json or normalized_artifact != "report":
-        _write_json(payload)
+        _write_json(
+            _artifact_payload_response(
+                target=report,
+                artifact=normalized_artifact,
+                record=record,
+                path=_artifact_path_for_record(record, store, normalized_artifact),
+                payload=payload,
+            )
+        )
         return
 
     report_model = ResearchReport.model_validate(payload)
