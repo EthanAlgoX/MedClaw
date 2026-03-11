@@ -5,7 +5,7 @@ from __future__ import annotations
 from medclaw.evidence.models import ResearchReport
 from medclaw.gateways.medical import PubMedGateway
 from medclaw.providers.base import LLMProvider
-from medclaw.workflows.base import ResearchWorkflow
+from medclaw.workflows.base import CollectionContext, ResearchWorkflow
 
 
 class LiteratureReviewWorkflow(ResearchWorkflow):
@@ -17,7 +17,12 @@ class LiteratureReviewWorkflow(ResearchWorkflow):
     def __init__(self, gateway: PubMedGateway | None = None):
         self.gateway = gateway or PubMedGateway()
 
-    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
+    async def run(
+        self,
+        query: str,
+        provider: LLMProvider | None,
+        collection_context: CollectionContext | None = None,
+    ) -> ResearchReport:
         evidence = await self.gateway.search(query, max_results=8)
         summary = await self.synthesize(
             query=query,
@@ -27,6 +32,7 @@ class LiteratureReviewWorkflow(ResearchWorkflow):
                 "Summarize the state of the evidence, note limits in retrieval, and mention "
                 "that findings should be verified against full papers."
             ),
+            collection_context=collection_context,
         )
         return ResearchReport(
             workflow_id=self.workflow_id,
@@ -38,4 +44,5 @@ class LiteratureReviewWorkflow(ResearchWorkflow):
                 "Use full texts and risk-of-bias review before making downstream decisions.",
             ],
             evidence=evidence,
+            metadata=self.build_report_metadata(collection_context),
         )

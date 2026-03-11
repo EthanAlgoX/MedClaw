@@ -53,9 +53,13 @@ class TestCLI:
         summary: str,
         generated_at: str,
         collection: str | None = None,
+        metadata: dict | None = None,
     ) -> Path:
         workspace = home / ".medclaw" / "workspace"
         store = EvidenceStore(workspace)
+        report_metadata = dict(metadata or {})
+        if collection:
+            report_metadata.setdefault("collection", collection)
         artifact_paths = store.save_report_artifacts(
             ResearchReport(
                 workflow_id=workflow_id,
@@ -63,7 +67,7 @@ class TestCLI:
                 title=title,
                 summary=summary,
                 generated_at=generated_at,
-                metadata={"collection": collection} if collection else {},
+                metadata=report_metadata,
             )
         )
         return artifact_paths["report"]
@@ -172,6 +176,7 @@ class TestCLI:
         assert "--json" in result.stdout
         assert "--save-path" in result.stdout
         assert "--no-llm" in result.stdout
+        assert "--collection" in result.stdout
 
     def test_research_artifacts_command_lists_saved_reports(self, tmp_path, monkeypatch):
         """Research artifacts command should list stored report records."""
@@ -396,6 +401,33 @@ class TestCLI:
         assert show_payload["collection"] == "EGFR Program"
         assert show_payload["owner"] == "Biomarker Team"
         assert show_payload["preferred_workflows"] == ["evidence_brief", "literature_review"]
+
+    def test_research_show_summary_view_includes_collection_objective(self, tmp_path, monkeypatch):
+        """Summary view should display collection objective when present in report metadata."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        report_path = self._seed_report_with_fields(
+            test_home,
+            workflow_id="evidence_brief",
+            title="EGFR Biomarker Brief",
+            question="EGFR biomarkers",
+            summary="A compact summary of EGFR biomarker evidence.",
+            generated_at="2026-03-07T09:00:00+00:00",
+            collection="EGFR Program",
+            metadata={"collection_objective": "Track EGFR biomarker evidence"},
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "show", report_path.name, "--view", "summary"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "collection: EGFR Program" in result.stdout
+        assert "objective: Track EGFR biomarker evidence" in result.stdout
 
     def test_research_artifacts_command_rejects_invalid_date(self, tmp_path, monkeypatch):
         """Research artifacts command should fail cleanly for invalid date filters."""

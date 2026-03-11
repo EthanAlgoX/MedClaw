@@ -41,10 +41,9 @@ class ResearchOrchestrator:
     ) -> ResearchReport:
         """Run a workflow, attach policy, and persist the report."""
         workflow = self.workflows[workflow_id]
-        report = await workflow.run(query, provider)
+        collection_context = self._resolve_collection_context(collection)
+        report = await workflow.run(query, provider, collection_context=collection_context)
         report = self.policy.apply(report)
-        if collection and collection.strip():
-            report.metadata["collection"] = collection.strip()
         artifact_paths = self.evidence_store.save_report_artifacts(report)
         report.metadata["saved_path"] = str(artifact_paths["report"])
         report.metadata["artifact_dir"] = str(artifact_paths["artifact_dir"])
@@ -67,3 +66,14 @@ class ResearchOrchestrator:
             }
             for workflow_id, workflow in self.workflows.items()
         ]
+
+    def _resolve_collection_context(self, collection: str | None) -> dict[str, object] | None:
+        """Load saved collection context when available and preserve ad-hoc collection names."""
+        if not collection or not collection.strip():
+            return None
+
+        normalized = collection.strip()
+        try:
+            return self.evidence_store.load_collection_manifest(normalized)
+        except FileNotFoundError:
+            return {"name": normalized}

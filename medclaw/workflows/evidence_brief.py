@@ -5,7 +5,7 @@ from __future__ import annotations
 from medclaw.evidence.models import ResearchReport
 from medclaw.gateways.medical import ClinicalTrialsGateway, PubMedGateway
 from medclaw.providers.base import LLMProvider
-from medclaw.workflows.base import ResearchWorkflow
+from medclaw.workflows.base import CollectionContext, ResearchWorkflow
 
 
 class EvidenceBriefWorkflow(ResearchWorkflow):
@@ -22,7 +22,12 @@ class EvidenceBriefWorkflow(ResearchWorkflow):
         self.literature_gateway = literature_gateway or PubMedGateway()
         self.trials_gateway = trials_gateway or ClinicalTrialsGateway()
 
-    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
+    async def run(
+        self,
+        query: str,
+        provider: LLMProvider | None,
+        collection_context: CollectionContext | None = None,
+    ) -> ResearchReport:
         literature = await self.literature_gateway.search(query, max_results=5)
         trials = await self.trials_gateway.search(query, max_results=3)
         evidence = literature + trials
@@ -34,6 +39,7 @@ class EvidenceBriefWorkflow(ResearchWorkflow):
                 "Create a short evidence brief that combines literature and trial signals, "
                 "and call out any missing or weak evidence."
             ),
+            collection_context=collection_context,
         )
         return ResearchReport(
             workflow_id=self.workflow_id,
@@ -45,4 +51,5 @@ class EvidenceBriefWorkflow(ResearchWorkflow):
                 "This brief is intended for rapid orientation, not final evidence grading.",
             ],
             evidence=evidence,
+            metadata=self.build_report_metadata(collection_context),
         )

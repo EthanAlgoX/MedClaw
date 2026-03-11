@@ -238,6 +238,8 @@ def _emit_report_summary(report: ResearchReport) -> None:
     console.print(f"workflow: {report.workflow_id}")
     if report.metadata.get("collection"):
         console.print(f"collection: {report.metadata['collection']}")
+    if report.metadata.get("collection_objective"):
+        console.print(f"objective: {report.metadata['collection_objective']}")
     console.print(f"generated: {generated_at}")
     console.print(f"question: {report.question}")
     console.print(f"evidence: {len(report.evidence)}")

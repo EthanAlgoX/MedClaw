@@ -5,7 +5,7 @@ from __future__ import annotations
 from medclaw.evidence.models import ResearchReport
 from medclaw.gateways.medical import ClinicalTrialsGateway
 from medclaw.providers.base import LLMProvider
-from medclaw.workflows.base import ResearchWorkflow
+from medclaw.workflows.base import CollectionContext, ResearchWorkflow
 
 
 class ClinicalTrialLandscapeWorkflow(ResearchWorkflow):
@@ -17,7 +17,12 @@ class ClinicalTrialLandscapeWorkflow(ResearchWorkflow):
     def __init__(self, gateway: ClinicalTrialsGateway | None = None):
         self.gateway = gateway or ClinicalTrialsGateway()
 
-    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
+    async def run(
+        self,
+        query: str,
+        provider: LLMProvider | None,
+        collection_context: CollectionContext | None = None,
+    ) -> ResearchReport:
         evidence = await self.gateway.search(query, max_results=8)
         summary = await self.synthesize(
             query=query,
@@ -27,6 +32,7 @@ class ClinicalTrialLandscapeWorkflow(ResearchWorkflow):
                 "Summarize the trial landscape, highlight recruitment status where visible, "
                 "and avoid making clinical recommendations."
             ),
+            collection_context=collection_context,
         )
         return ResearchReport(
             workflow_id=self.workflow_id,
@@ -38,4 +44,5 @@ class ClinicalTrialLandscapeWorkflow(ResearchWorkflow):
                 "Eligibility, endpoints, and status should be verified on the source record.",
             ],
             evidence=evidence,
+            metadata=self.build_report_metadata(collection_context),
         )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from medclaw.evidence.models import ResearchReport
 from medclaw.gateways.medical import DrugGateway, PubMedGateway
 from medclaw.providers.base import LLMProvider
-from medclaw.workflows.base import ResearchWorkflow
+from medclaw.workflows.base import CollectionContext, ResearchWorkflow
 
 
 class DrugTargetLandscapeWorkflow(ResearchWorkflow):
@@ -22,7 +22,12 @@ class DrugTargetLandscapeWorkflow(ResearchWorkflow):
         self.drug_gateway = drug_gateway or DrugGateway()
         self.literature_gateway = literature_gateway or PubMedGateway()
 
-    async def run(self, query: str, provider: LLMProvider | None) -> ResearchReport:
+    async def run(
+        self,
+        query: str,
+        provider: LLMProvider | None,
+        collection_context: CollectionContext | None = None,
+    ) -> ResearchReport:
         drug_items = await self.drug_gateway.search(query)
         literature_items = await self.literature_gateway.search(query, max_results=4)
         evidence = drug_items + literature_items
@@ -34,6 +39,7 @@ class DrugTargetLandscapeWorkflow(ResearchWorkflow):
                 "Summarize the available drug/target context and clearly separate placeholder "
                 "drug records from literature-backed findings."
             ),
+            collection_context=collection_context,
         )
         return ResearchReport(
             workflow_id=self.workflow_id,
@@ -45,4 +51,5 @@ class DrugTargetLandscapeWorkflow(ResearchWorkflow):
                 "Drug lookup support is currently limited and should be expanded with richer sources.",
             ],
             evidence=evidence,
+            metadata=self.build_report_metadata(collection_context),
         )

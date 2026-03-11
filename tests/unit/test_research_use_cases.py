@@ -24,6 +24,27 @@ class FakeProvider(LLMProvider):
         return ["fake-model"]
 
 
+class CaptureProvider(LLMProvider):
+    """Provider that records prompt messages for assertions."""
+
+    def __init__(self):
+        self.messages = None
+
+    async def chat(self, messages, temperature=None, max_tokens=None, **kwargs) -> str:
+        self.messages = messages
+        return "Captured collection-aware summary."
+
+    async def chat_with_tools(self, messages, tools=None, temperature=None, max_tokens=None, **kwargs):
+        self.messages = messages
+        return "Captured collection-aware summary.", []
+
+    def get_default_model(self) -> str:
+        return "capture-model"
+
+    def get_available_models(self) -> list[str]:
+        return ["capture-model"]
+
+
 def test_use_case_runs_and_saves_report(temp_workspace: Path, monkeypatch):
     """Typed research queries should run through the new workflow stack."""
     use_cases = MedicalResearchUseCases(temp_workspace)
@@ -108,3 +129,85 @@ def test_run_workflow_report_without_llm(temp_workspace: Path, monkeypatch):
     assert report.metadata["saved_path"]
     assert report.metadata["artifact_dir"]
     assert report.metadata["artifact_paths"]["citations"].endswith("citations.json")
+
+
+def test_run_workflow_report_injects_collection_manifest_context(temp_workspace: Path, monkeypatch):
+    """Collection manifests should enrich report metadata and LLM synthesis context."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+    use_cases.orchestrator.evidence_store.save_collection_manifest(
+        name="KRAS Program",
+        objective="Track resistance mechanisms and biomarker evidence",
+        disease_area="Oncology",
+        owner="Translational Team",
+        tags=["kras", "oncology"],
+        preferred_workflows=["literature_review", "evidence_brief"],
+    )
+
+    async def fake_search(query: str, max_results: int = 8):
+        return [
+            EvidenceItem(
+                id="1",
+                kind="literature",
+                source="pubmed",
+                title="Paper 1",
+                summary="Key paper",
+                citations=[Citation(source="pubmed", title="Paper 1", identifier="1")],
+            )
+        ]
+
+    monkeypatch.setattr(
+        use_cases.orchestrator.workflows["literature_review"].gateway,
+        "search",
+        fake_search,
+    )
+    provider = CaptureProvider()
+
+    report = asyncio.run(
+        use_cases.run_workflow_report(
+            workflow_id="literature_review",
+            query="KRAS inhibitors",
+            provider=provider,
+            collection="KRAS Program",
+        )
+    )
+
+    saved_report = use_cases.orchestrator.evidence_store.load_report(report.metadata["saved_path"])
+
+    assert report.metadata["collection"] == "KRAS Program"
+    assert report.metadata["collection_objective"] == "Track resistance mechanisms and biomarker evidence"
+    assert report.metadata["collection_preferred_workflows"] == ["literature_review", "evidence_brief"]
+    assert saved_report.metadata["collection_slug"] == "kras-program"
+    assert provider.messages is not None
+    assert "Collection: KRAS Program" in provider.messages[1]["content"]
+    assert "Track resistance mechanisms and biomarker evidence" in provider.messages[1]["content"]
+
+
+def test_run_workflow_report_without_llm_mentions_collection_context(temp_workspace: Path, monkeypatch):
+    """Fallback summaries should preserve collection context when manifests exist."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+    use_cases.orchestrator.evidence_store.save_collection_manifest(
+        name="EGFR Program",
+        objective="Track EGFR biomarker evidence",
+    )
+
+    async def fake_search(query: str, max_results: int = 8):
+        return []
+
+    monkeypatch.setattr(
+        use_cases.orchestrator.workflows["literature_review"].gateway,
+        "search",
+        fake_search,
+    )
+
+    report = asyncio.run(
+        use_cases.run_workflow_report(
+            workflow_id="literature_review",
+            query="EGFR biomarkers",
+            provider=None,
+            collection="EGFR Program",
+        )
+    )
+
+    assert "for collection 'EGFR Program'" in report.summary
+    assert "objective: Track EGFR biomarker evidence" in report.summary
+    assert report.metadata["collection"] == "EGFR Program"
