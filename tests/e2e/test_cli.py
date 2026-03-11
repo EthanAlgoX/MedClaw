@@ -304,6 +304,15 @@ class TestCLI:
         """Research collections command should aggregate reports by collection."""
         test_home = tmp_path / "test_home"
         test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="KRAS Program",
+            objective="Track KRAS evidence",
+            disease_area="Oncology",
+            owner="Translational Team",
+            tags=["kras", "oncology"],
+            preferred_workflows=["literature_review", "evidence_brief"],
+        )
         self._seed_report_with_fields(
             test_home,
             workflow_id="literature_review",
@@ -336,6 +345,57 @@ class TestCLI:
         assert len(payload) == 1
         assert payload[0]["collection"] == "KRAS Program"
         assert payload[0]["report_count"] == 2
+        assert payload[0]["owner"] == "Translational Team"
+
+    def test_research_collection_set_and_show_commands_manage_manifest(self, tmp_path, monkeypatch):
+        """Research collection manifest commands should create and retrieve project metadata."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        save_result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "collection-set",
+                "EGFR Program",
+                "--objective",
+                "Track EGFR biomarker evidence",
+                "--disease-area",
+                "Thoracic oncology",
+                "--owner",
+                "Biomarker Team",
+                "--tag",
+                "egfr",
+                "--tag",
+                "nsclc",
+                "--preferred-workflow",
+                "evidence_brief",
+                "--preferred-workflow",
+                "literature_review",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert save_result.returncode == 0
+        save_payload = json.loads(save_result.stdout)
+        assert save_payload["slug"] == "egfr-program"
+
+        show_result = subprocess.run(
+            ["medclaw", "research", "collection-show", "EGFR Program", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert show_result.returncode == 0
+        show_payload = json.loads(show_result.stdout)
+        assert show_payload["collection"] == "EGFR Program"
+        assert show_payload["owner"] == "Biomarker Team"
+        assert show_payload["preferred_workflows"] == ["evidence_brief", "literature_review"]
 
     def test_research_artifacts_command_rejects_invalid_date(self, tmp_path, monkeypatch):
         """Research artifacts command should fail cleanly for invalid date filters."""

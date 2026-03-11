@@ -17,7 +17,9 @@ class EvidenceStore:
         self.workspace = workspace
         self.base_path = workspace / "research"
         self.reports_path = self.base_path / "reports"
+        self.collections_path = self.base_path / "collections"
         self.reports_path.mkdir(parents=True, exist_ok=True)
+        self.collections_path.mkdir(parents=True, exist_ok=True)
 
     def save_report(self, report: ResearchReport) -> Path:
         """Save a structured research report to disk."""
@@ -156,14 +158,43 @@ class EvidenceStore:
     def list_collection_records(self, limit: int = 50) -> list[dict[str, Any]]:
         """Aggregate saved reports by collection."""
         collections: dict[str, dict[str, Any]] = {}
+        for manifest in self.list_collection_manifests(limit=1000):
+            key = manifest["slug"]
+            collections[key] = {
+                "collection": manifest["name"],
+                "slug": manifest["slug"],
+                "objective": manifest["objective"],
+                "disease_area": manifest["disease_area"],
+                "owner": manifest["owner"],
+                "tags": manifest["tags"],
+                "preferred_workflows": manifest["preferred_workflows"],
+                "created_at": manifest["created_at"],
+                "updated_at": manifest["updated_at"],
+                "report_count": 0,
+                "evidence_count": 0,
+                "citation_count": 0,
+                "latest_generated_at": "",
+                "workflows": [],
+                "titles": [],
+            }
+
         for record in self.filter_report_records(limit=1000):
             collection = record["collection"]
             if not collection:
                 continue
-            entry = collections.get(collection)
+            key = self._slugify_collection_name(collection)
+            entry = collections.get(key)
             if entry is None:
-                collections[collection] = {
+                collections[key] = {
                     "collection": collection,
+                    "slug": key,
+                    "objective": "",
+                    "disease_area": "",
+                    "owner": "",
+                    "tags": [],
+                    "preferred_workflows": [],
+                    "created_at": "",
+                    "updated_at": "",
                     "report_count": 1,
                     "evidence_count": record["evidence_count"],
                     "citation_count": record["citation_count"],
@@ -184,26 +215,76 @@ class EvidenceStore:
 
         ordered = sorted(
             collections.values(),
-            key=lambda item: (item["latest_generated_at"], item["collection"]),
+            key=lambda item: (
+                item["latest_generated_at"] or item["updated_at"] or item["created_at"],
+                item["collection"],
+            ),
             reverse=True,
         )
         return ordered[:limit]
 
-        results = []
-        for record in self.list_report_records(limit=limit * 4):
-            haystack = " ".join(
-                [
-                    record["filename"],
-                    record["workflow_id"],
-                    record["title"],
-                    record["question"],
-                ]
-            ).lower()
-            if lowered in haystack:
-                results.append(record)
-            if len(results) >= limit:
+    def save_collection_manifest(
+        self,
+        name: str,
+        objective: str = "",
+        disease_area: str = "",
+        owner: str = "",
+        tags: list[str] | None = None,
+        preferred_workflows: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create or update a collection manifest."""
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValueError("Collection name cannot be empty")
+
+        slug = self._slugify_collection_name(normalized_name)
+        path = self.collections_path / f"{slug}.json"
+        now = datetime.now(timezone.utc).isoformat()
+        existing: dict[str, Any] = {}
+        if path.exists():
+            existing = json.loads(path.read_text(encoding="utf-8"))
+
+        payload = {
+            "name": normalized_name,
+            "slug": slug,
+            "objective": objective.strip(),
+            "disease_area": disease_area.strip(),
+            "owner": owner.strip(),
+            "tags": self._normalize_string_list(tags or []),
+            "preferred_workflows": self._normalize_string_list(preferred_workflows or []),
+            "created_at": existing.get("created_at", now),
+            "updated_at": now,
+        }
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        return payload
+
+    def load_collection_manifest(self, name_or_slug: str) -> dict[str, Any]:
+        """Load a collection manifest by display name or slug."""
+        normalized = name_or_slug.strip()
+        if not normalized:
+            raise FileNotFoundError("Collection name cannot be empty")
+
+        direct_path = self.collections_path / f"{self._slugify_collection_name(normalized)}.json"
+        if direct_path.exists():
+            return json.loads(direct_path.read_text(encoding="utf-8"))
+
+        for manifest in self.list_collection_manifests(limit=1000):
+            if manifest["name"].lower() == normalized.lower():
+                return manifest
+
+        raise FileNotFoundError(f"Could not find research collection: {name_or_slug}")
+
+    def list_collection_manifests(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List saved collection manifests, newest first."""
+        manifests = []
+        for path in sorted(self.collections_path.glob("*.json"), reverse=True):
+            try:
+                manifests.append(json.loads(path.read_text(encoding="utf-8")))
+            except Exception:
+                continue
+            if len(manifests) >= limit:
                 break
-        return results
+        return manifests
 
     def load_report(self, path: Path | str) -> ResearchReport:
         """Load a structured research report from disk."""
@@ -288,6 +369,35 @@ class EvidenceStore:
         if len(compact) <= max_length:
             return compact
         return compact[: max_length - 1].rstrip() + "…"
+
+    def _normalize_string_list(self, values: list[str]) -> list[str]:
+        """Normalize repeated string values while preserving order."""
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            cleaned = value.strip()
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
+    def _slugify_collection_name(self, name: str) -> str:
+        """Create a filesystem-safe collection slug."""
+        slug_chars = [
+            char.lower() if char.isalnum() else "-"
+            for char in name.strip()
+        ]
+        slug = "".join(slug_chars)
+        while "--" in slug:
+            slug = slug.replace("--", "-")
+        slug = slug.strip("-")
+        if not slug:
+            raise ValueError("Collection name must include letters or numbers")
+        return slug
 
     def _parse_generated_at(self, value: str) -> datetime:
         """Parse a stored report timestamp."""

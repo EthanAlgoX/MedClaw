@@ -249,6 +249,27 @@ def _emit_report_summary(report: ResearchReport) -> None:
         console.print(f"summary: {' '.join(report.summary.split())}")
 
 
+def _emit_collection_manifest(record: dict) -> None:
+    """Render a collection manifest with aggregate report stats."""
+    latest = record["latest_generated_at"].split("T", 1)[0] if record["latest_generated_at"] else "n/a"
+    console.print(f"[bold]{record['collection']}[/bold]")
+    console.print(f"slug: {record['slug']}")
+    console.print(f"reports: {record['report_count']}")
+    console.print(f"latest: {latest}")
+    if record["owner"]:
+        console.print(f"owner: {record['owner']}")
+    if record["disease_area"]:
+        console.print(f"disease area: {record['disease_area']}")
+    if record["objective"]:
+        console.print(f"objective: {record['objective']}")
+    if record["tags"]:
+        console.print(f"tags: {', '.join(record['tags'])}")
+    if record["preferred_workflows"]:
+        console.print(f"preferred workflows: {', '.join(record['preferred_workflows'])}")
+    if record["workflows"]:
+        console.print(f"active workflows: {', '.join(record['workflows'])}")
+
+
 @app.command()
 def skills(search: str | None = None):
     """List available skills."""
@@ -368,14 +389,96 @@ def research_collections(
 
     console.print("[bold]Research Collections:[/bold]")
     for record in records:
-        latest = record["latest_generated_at"].split("T", 1)[0]
+        latest = record["latest_generated_at"].split("T", 1)[0] if record["latest_generated_at"] else "n/a"
         console.print(
             "  - "
             f"{record['collection']} reports={record['report_count']} "
             f"evidence={record['evidence_count']} citations={record['citation_count']} latest={latest}"
         )
+        if record["owner"]:
+            console.print(f"      owner: {record['owner']}")
+        if record["disease_area"]:
+            console.print(f"      disease area: {record['disease_area']}")
         console.print(f"      workflows: {', '.join(record['workflows'])}")
+        if record["tags"]:
+            console.print(f"      tags: {', '.join(record['tags'])}")
         console.print(f"      titles: {', '.join(record['titles'][:3])}")
+
+
+@research_app.command("collection-set")
+def research_collection_set(
+    name: str,
+    objective: str = typer.Option("", "--objective", help="Research objective for this collection."),
+    disease_area: str = typer.Option("", "--disease-area", help="Disease area or focus domain."),
+    owner: str = typer.Option("", "--owner", help="Collection owner or lead."),
+    tags: list[str] | None = typer.Option(None, "--tag", help="Repeatable collection tag."),
+    preferred_workflows: list[str] | None = typer.Option(
+        None,
+        "--preferred-workflow",
+        help="Repeatable preferred workflow id.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Create or update a research collection manifest."""
+    store = _get_evidence_store()
+    try:
+        record = store.save_collection_manifest(
+            name=name,
+            objective=objective,
+            disease_area=disease_area,
+            owner=owner,
+            tags=tags or [],
+            preferred_workflows=preferred_workflows or [],
+        )
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if as_json:
+        _write_json(record)
+        return
+
+    console.print(f"[green]Saved collection:[/green] {record['name']}")
+    console.print(f"slug: {record['slug']}")
+
+
+@research_app.command("collection-show")
+def research_collection_show(
+    name: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Show a research collection manifest with aggregate stats."""
+    store = _get_evidence_store()
+    try:
+        manifest = store.load_collection_manifest(name)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    collection_records = store.list_collection_records(limit=1000)
+    merged = next(
+        (
+            record
+            for record in collection_records
+            if record["slug"] == manifest["slug"]
+        ),
+        {
+            "collection": manifest["name"],
+            **manifest,
+            "report_count": 0,
+            "evidence_count": 0,
+            "citation_count": 0,
+            "latest_generated_at": "",
+            "workflows": [],
+            "titles": [],
+        },
+    )
+
+    if as_json:
+        _write_json(merged)
+        return
+
+    _emit_collection_manifest(merged)
 
 
 @research_app.command("show")

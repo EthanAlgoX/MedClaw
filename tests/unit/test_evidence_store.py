@@ -158,6 +158,14 @@ class TestEvidenceStore:
 
     def test_list_collection_records_aggregates_named_projects(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="KRAS Program",
+            objective="Track resistance and biomarkers",
+            disease_area="Oncology",
+            owner="Translational Team",
+            tags=["kras", "oncology"],
+            preferred_workflows=["literature_review", "evidence_brief"],
+        )
         store.save_report_artifacts(
             ResearchReport(
                 workflow_id="literature_review",
@@ -184,7 +192,27 @@ class TestEvidenceStore:
         assert len(collections) == 1
         assert collections[0]["collection"] == "KRAS Program"
         assert collections[0]["report_count"] == 2
+        assert collections[0]["owner"] == "Translational Team"
         assert set(collections[0]["workflows"]) == {"literature_review", "evidence_brief"}
+
+    def test_collection_manifest_round_trip_preserves_metadata(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+
+        manifest = store.save_collection_manifest(
+            name="EGFR Program",
+            objective="Track EGFR biomarker evidence",
+            disease_area="Thoracic oncology",
+            owner="Biomarker Team",
+            tags=["egfr", "nsclc", "biomarker", "egfr"],
+            preferred_workflows=["evidence_brief", "literature_review", "evidence_brief"],
+        )
+        loaded = store.load_collection_manifest("EGFR Program")
+
+        assert manifest["slug"] == "egfr-program"
+        assert loaded["objective"] == "Track EGFR biomarker evidence"
+        assert loaded["owner"] == "Biomarker Team"
+        assert loaded["tags"] == ["egfr", "nsclc", "biomarker"]
+        assert loaded["preferred_workflows"] == ["evidence_brief", "literature_review"]
 
     def test_read_artifact_returns_structured_payloads(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
