@@ -205,6 +205,7 @@ class TestCLI:
 
         assert result.returncode == 0
         assert "--kind" in result.stdout
+        assert "--artifact" in result.stdout
         assert "--by-collection" in result.stdout
         assert "--show" in result.stdout
         assert "--save-path" in result.stdout
@@ -484,6 +485,53 @@ class TestCLI:
         assert result.returncode == 0
         assert bundle_paths["bundle_markdown"].as_posix() in result.stdout
 
+    def test_research_latest_command_can_print_specific_artifact_path(self, tmp_path, monkeypatch):
+        """Latest shortcut should print the requested artifact path when specified."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        bundle_paths = store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "latest",
+                "--kind",
+                "bundle",
+                "--artifact",
+                "bundle-json",
+                "--save-path",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert bundle_paths["bundle_json"].as_posix() in result.stdout
+
     def test_research_latest_command_supports_by_collection_summary_list(self, tmp_path, monkeypatch):
         """Latest shortcut should summarize newest artifacts per collection."""
         test_home = tmp_path / "test_home"
@@ -589,6 +637,33 @@ class TestCLI:
         assert result.returncode == 0
         assert kras_report.as_posix() in result.stdout
         assert egfr_report.as_posix() in result.stdout
+
+    def test_research_latest_command_can_return_specific_report_artifact_payload(self, tmp_path, monkeypatch):
+        """Latest shortcut should expose specific report artifacts as JSON."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report(test_home)
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "latest",
+                "--kind",
+                "report",
+                "--artifact",
+                "citations",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload[0]["identifier"] == "PMID:1"
 
     def test_research_artifacts_command_supports_search(self, tmp_path, monkeypatch):
         """Research artifacts command should filter reports by search text."""

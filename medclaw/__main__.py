@@ -272,6 +272,32 @@ def _emit_artifact_record(record: dict, store: EvidenceStore) -> None:
     _emit_research_report(report_model)
 
 
+def _normalize_artifact_option(artifact: str | None) -> str | None:
+    """Normalize CLI artifact option names."""
+    if artifact is None:
+        return None
+    return artifact.strip().lower().replace("-", "_")
+
+
+def _artifact_payload_for_record(record: dict, store: EvidenceStore, artifact: str):
+    """Read a specific artifact payload for a unified artifact record."""
+    if record["kind"] == "collection_bundle":
+        return store.read_bundle_artifact(record["id"], artifact=artifact)
+    return store.read_artifact(record["id"], artifact=artifact)
+
+
+def _artifact_path_for_record(record: dict, store: EvidenceStore, artifact: str) -> str:
+    """Resolve a specific artifact path for a unified artifact record."""
+    if record["kind"] == "collection_bundle":
+        paths = store.get_bundle_artifact_paths(record["id"])
+    else:
+        paths = store.get_artifact_paths(record["id"])
+    if artifact not in paths:
+        supported = ", ".join(sorted(paths))
+        raise ValueError(f"Unsupported artifact '{artifact}' for {record['kind']}. Choose from: {supported}")
+    return str(paths[artifact])
+
+
 def _artifact_primary_path(record: dict) -> str:
     """Return the primary file path for an artifact record."""
     if record["kind"] == "collection_bundle":
@@ -524,6 +550,11 @@ def research_artifacts(
 @research_app.command("latest")
 def research_latest(
     kind: str | None = typer.Option(None, "--kind", help="Artifact kind: report or bundle."),
+    artifact: str | None = typer.Option(
+        None,
+        "--artifact",
+        help="Specific artifact: report, evidence, citations, metadata, bundle-markdown, bundle-json.",
+    ),
     workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
     collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
     by_collection: bool = typer.Option(
@@ -545,6 +576,7 @@ def research_latest(
 ):
     """Show the latest saved research artifact."""
     store = _get_evidence_store()
+    normalized_artifact = _normalize_artifact_option(artifact)
     try:
         records = store.list_artifact_records(
             kind=kind,
@@ -558,17 +590,54 @@ def research_latest(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if as_json:
-        payload = records if by_collection else (records[0] if records else {})
-        _write_json(payload)
-        return
-
     if not records:
         console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
         return
 
     if save_path:
-        _write_lines([_artifact_primary_path(record) for record in records])
+        try:
+            paths = [
+                _artifact_path_for_record(record, store, normalized_artifact)
+                if normalized_artifact
+                else _artifact_primary_path(record)
+                for record in records
+            ]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+        _write_lines(paths)
+        return
+
+    if normalized_artifact:
+        try:
+            payloads = [
+                _artifact_payload_for_record(record, store, normalized_artifact)
+                for record in records
+            ]
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+        if as_json:
+            payload = payloads if by_collection else payloads[0]
+            _write_json(payload)
+            return
+
+        for index, payload in enumerate(payloads):
+            if index:
+                console.print("\n---\n")
+            if normalized_artifact == "bundle_markdown":
+                console.print(Markdown(payload))
+            elif normalized_artifact == "report":
+                report_model = ResearchReport.model_validate(payload)
+                _emit_research_report(report_model)
+            else:
+                _write_json(payload)
+        return
+
+    if as_json:
+        payload = records if by_collection else records[0]
+        _write_json(payload)
         return
 
     if by_collection and not show:
