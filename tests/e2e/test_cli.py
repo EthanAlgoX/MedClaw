@@ -194,6 +194,21 @@ class TestCLI:
         assert "--all-preferred" in result.stdout
         assert "--no-llm" in result.stdout
 
+    def test_research_latest_help_includes_latest_options(self):
+        """Latest shortcut help should expose collection and rendering options."""
+        result = subprocess.run(
+            ["medclaw", "research", "latest", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert result.returncode == 0
+        assert "--kind" in result.stdout
+        assert "--by-collection" in result.stdout
+        assert "--show" in result.stdout
+        assert "--json" in result.stdout
+
     def test_research_artifacts_help_includes_kind_filter(self):
         """Artifact listing help should expose the kind filter."""
         result = subprocess.run(
@@ -391,6 +406,115 @@ class TestCLI:
         assert latest_payload[0]["kind"] == "collection_bundle"
         assert len(latest_by_collection_payload) == 2
         assert {item["collection"] for item in latest_by_collection_payload} == {"KRAS Program", "EGFR Program"}
+
+    def test_research_latest_command_shows_latest_artifact_content(self, tmp_path, monkeypatch):
+        """Latest shortcut should render the newest artifact content directly."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "latest", "--kind", "bundle"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "Collection Brief: KRAS Program" in result.stdout
+
+    def test_research_latest_command_supports_by_collection_summary_list(self, tmp_path, monkeypatch):
+        """Latest shortcut should summarize newest artifacts per collection."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="evidence_brief",
+            title="KRAS Biomarker Brief",
+            question="KRAS biomarkers",
+            summary="Summary",
+            generated_at="2026-03-06T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="study_design",
+            title="EGFR Study Design",
+            question="EGFR biomarkers",
+            summary="Summary",
+            generated_at="2026-03-07T09:00:00+00:00",
+            collection="EGFR Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "latest", "--by-collection"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "Latest Research Artifacts" in result.stdout
+        assert "KRAS Biomarker Brief" in result.stdout
+        assert "EGFR Study Design" in result.stdout
+
+    def test_research_latest_command_supports_by_collection_show(self, tmp_path, monkeypatch):
+        """Latest shortcut should render each latest artifact when --show is used."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="evidence_brief",
+            title="KRAS Biomarker Brief",
+            question="KRAS biomarkers",
+            summary="Summary one",
+            generated_at="2026-03-06T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="study_design",
+            title="EGFR Study Design",
+            question="EGFR biomarkers",
+            summary="Summary two",
+            generated_at="2026-03-07T09:00:00+00:00",
+            collection="EGFR Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "latest", "--by-collection", "--show"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "KRAS Biomarker Brief" in result.stdout
+        assert "EGFR Study Design" in result.stdout
 
     def test_research_artifacts_command_supports_search(self, tmp_path, monkeypatch):
         """Research artifacts command should filter reports by search text."""

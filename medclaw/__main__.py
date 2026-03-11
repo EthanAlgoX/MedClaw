@@ -260,6 +260,37 @@ def _write_json(payload) -> None:
     sys.stdout.write("\n")
 
 
+def _emit_artifact_record(record: dict, store: EvidenceStore) -> None:
+    """Render a single artifact record into user-facing output."""
+    if record["kind"] == "collection_bundle":
+        markdown = store.read_bundle_artifact(record["id"], artifact="bundle_markdown")
+        console.print(Markdown(markdown))
+        return
+
+    payload = store.read_artifact(record["id"], artifact="report")
+    report_model = ResearchReport.model_validate(payload)
+    _emit_research_report(report_model)
+
+
+def _emit_artifact_record_list(records: list[dict]) -> None:
+    """Render a compact list of artifact records."""
+    if not records:
+        console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
+        return
+
+    console.print("[bold]Latest Research Artifacts:[/bold]")
+    for record in records:
+        generated_at = record["generated_at"].split("T", 1)[0]
+        if record["kind"] == "collection_bundle":
+            console.print(
+                f"  - {record['collection']} [bundle] {generated_at} workflows={', '.join(record['workflow_ids'])}"
+            )
+        else:
+            console.print(
+                f"  - {record['title']} [{record['workflow_id']}] {generated_at}"
+            )
+
+
 def _emit_report_summary(report: ResearchReport) -> None:
     """Render a compact summary view for saved reports."""
     generated_at = report.generated_at.split("T", 1)[0]
@@ -474,6 +505,57 @@ def research_artifacts(
         console.print(f"      question: {record['question']}")
         if record["summary_preview"]:
             console.print(f"      summary: {record['summary_preview']}")
+
+
+@research_app.command("latest")
+def research_latest(
+    kind: str | None = typer.Option(None, "--kind", help="Artifact kind: report or bundle."),
+    workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
+    collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
+    by_collection: bool = typer.Option(
+        False,
+        "--by-collection",
+        help="Return the newest artifact for each named collection.",
+    ),
+    show: bool = typer.Option(
+        False,
+        "--show",
+        help="With --by-collection, render each artifact instead of listing summaries.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Show the latest saved research artifact."""
+    store = _get_evidence_store()
+    try:
+        records = store.list_artifact_records(
+            kind=kind,
+            workflow_id=workflow,
+            collection=collection,
+            latest=not by_collection,
+            latest_by_collection=by_collection,
+            limit=50 if by_collection else 1,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if as_json:
+        payload = records if by_collection else (records[0] if records else {})
+        _write_json(payload)
+        return
+
+    if not records:
+        console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
+        return
+
+    if by_collection and not show:
+        _emit_artifact_record_list(records)
+        return
+
+    for index, record in enumerate(records):
+        if index:
+            console.print("\n---\n")
+        _emit_artifact_record(record, store)
 
 
 @research_app.command("collections")
