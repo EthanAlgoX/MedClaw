@@ -239,10 +239,13 @@ def _emit_research_reports(
         _write_json([report.model_dump(mode="json") for report in reports])
         return
 
-    for index, report in enumerate(reports):
-        if index:
-            console.print("\n---\n")
-        _emit_research_report(report)
+    if len(reports) > 1:
+        from medclaw.reporting.briefs import render_collection_report_bundle
+
+        console.print(Markdown(render_collection_report_bundle(reports)))
+        return
+
+    _emit_research_report(reports[0])
 
 
 def _write_json(payload) -> None:
