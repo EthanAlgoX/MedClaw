@@ -272,6 +272,20 @@ def _emit_artifact_record(record: dict, store: EvidenceStore) -> None:
     _emit_research_report(report_model)
 
 
+def _artifact_primary_path(record: dict) -> str:
+    """Return the primary file path for an artifact record."""
+    if record["kind"] == "collection_bundle":
+        return record.get("bundle_markdown_path", "")
+    return record.get("path", "")
+
+
+def _write_lines(lines: list[str]) -> None:
+    """Write plain lines without terminal wrapping."""
+    for line in lines:
+        sys.stdout.write(line)
+        sys.stdout.write("\n")
+
+
 def _emit_artifact_record_list(records: list[dict]) -> None:
     """Render a compact list of artifact records."""
     if not records:
@@ -522,6 +536,11 @@ def research_latest(
         "--show",
         help="With --by-collection, render each artifact instead of listing summaries.",
     ),
+    save_path: bool = typer.Option(
+        False,
+        "--save-path",
+        help="Print the primary artifact path instead of rendering content.",
+    ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
 ):
     """Show the latest saved research artifact."""
@@ -546,6 +565,10 @@ def research_latest(
 
     if not records:
         console.print("[yellow]No research artifacts matched the current filters.[/yellow]")
+        return
+
+    if save_path:
+        _write_lines([_artifact_primary_path(record) for record in records])
         return
 
     if by_collection and not show:
