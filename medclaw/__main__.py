@@ -225,6 +225,26 @@ def _emit_research_report(
     console.print(Markdown(render_research_report(report)))
 
 
+def _emit_research_reports(
+    reports: list[ResearchReport],
+    as_json: bool = False,
+    save_path_only: bool = False,
+) -> None:
+    """Render one or more research reports for CLI output."""
+    if save_path_only:
+        for report in reports:
+            console.print(str(report.metadata.get("saved_path", "")))
+        return
+    if as_json:
+        _write_json([report.model_dump(mode="json") for report in reports])
+        return
+
+    for index, report in enumerate(reports):
+        if index:
+            console.print("\n---\n")
+        _emit_research_report(report)
+
+
 def _write_json(payload) -> None:
     """Write machine-readable JSON without terminal wrapping."""
     sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -309,6 +329,46 @@ def research_workflows():
     console.print("[bold]Research Workflows:[/bold]")
     for workflow in workflows:
         console.print(f"  - {workflow['id']}: {workflow['title']}")
+
+
+@research_app.command("run")
+def research_run(
+    query: str,
+    collection: str | None = typer.Option(
+        None,
+        "--collection",
+        help="Use collection preferences and metadata for workflow selection.",
+    ),
+    workflow: str | None = typer.Option(
+        None,
+        "--workflow",
+        help="Explicit workflow id to run instead of collection preference.",
+    ),
+    all_preferred: bool = typer.Option(
+        False,
+        "--all-preferred",
+        help="Run every preferred workflow defined on the collection.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only saved report paths."),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Run without model synthesis."),
+):
+    """Run collection-aware research workflows."""
+    use_cases = _get_research_use_cases()
+    provider = None
+    if not no_llm:
+        _, provider = _get_configured_provider()
+
+    reports = asyncio.run(
+        use_cases.run_collection_reports(
+            query=query,
+            provider=provider,
+            collection=collection,
+            workflow_id=workflow,
+            all_preferred=all_preferred,
+        )
+    )
+    _emit_research_reports(reports, as_json=as_json, save_path_only=save_path)
 
 
 @research_app.command("artifacts")

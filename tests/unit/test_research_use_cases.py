@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from medclaw.application.use_cases import MedicalResearchUseCases
-from medclaw.evidence.models import Citation, EvidenceItem
+from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport
 from medclaw.providers.base import LLMProvider
 
 
@@ -211,3 +211,98 @@ def test_run_workflow_report_without_llm_mentions_collection_context(temp_worksp
     assert "for collection 'EGFR Program'" in report.summary
     assert "objective: Track EGFR biomarker evidence" in report.summary
     assert report.metadata["collection"] == "EGFR Program"
+
+
+def test_run_collection_reports_prefers_collection_workflows(temp_workspace: Path, monkeypatch):
+    """Collection-driven runs should select the first preferred workflow by default."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+    use_cases.orchestrator.evidence_store.save_collection_manifest(
+        name="KRAS Program",
+        preferred_workflows=["study_design", "evidence_brief"],
+    )
+
+    async def fake_run(workflow_id: str, query: str, provider, collection: str | None = None):
+        return ResearchReport(
+            workflow_id=workflow_id,
+            question=query,
+            title=f"Stub: {workflow_id}",
+            summary="Summary",
+            metadata={"collection": collection or ""},
+        )
+
+    monkeypatch.setattr(use_cases.orchestrator, "run", fake_run)
+
+    reports = asyncio.run(
+        use_cases.run_collection_reports(
+            query="KRAS inhibitors",
+            provider=None,
+            collection="KRAS Program",
+        )
+    )
+
+    assert len(reports) == 1
+    assert reports[0].workflow_id == "study_design"
+    assert reports[0].metadata["collection"] == "KRAS Program"
+
+
+def test_run_collection_reports_can_execute_all_preferred_workflows(temp_workspace: Path, monkeypatch):
+    """Collection-driven runs should support batch execution of preferred workflows."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+    use_cases.orchestrator.evidence_store.save_collection_manifest(
+        name="EGFR Program",
+        preferred_workflows=["study_design", "evidence_brief"],
+    )
+
+    async def fake_run(workflow_id: str, query: str, provider, collection: str | None = None):
+        return ResearchReport(
+            workflow_id=workflow_id,
+            question=query,
+            title=f"Stub: {workflow_id}",
+            summary="Summary",
+            metadata={"collection": collection or ""},
+        )
+
+    monkeypatch.setattr(use_cases.orchestrator, "run", fake_run)
+
+    reports = asyncio.run(
+        use_cases.run_collection_reports(
+            query="EGFR biomarkers",
+            provider=None,
+            collection="EGFR Program",
+            all_preferred=True,
+        )
+    )
+
+    assert [report.workflow_id for report in reports] == ["study_design", "evidence_brief"]
+
+
+def test_run_collection_reports_can_override_collection_preference(temp_workspace: Path, monkeypatch):
+    """Explicit workflow selection should override collection preferences."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+    use_cases.orchestrator.evidence_store.save_collection_manifest(
+        name="EGFR Program",
+        preferred_workflows=["study_design", "evidence_brief"],
+    )
+
+    async def fake_run(workflow_id: str, query: str, provider, collection: str | None = None):
+        return ResearchReport(
+            workflow_id=workflow_id,
+            question=query,
+            title=f"Stub: {workflow_id}",
+            summary="Summary",
+            metadata={"collection": collection or ""},
+        )
+
+    monkeypatch.setattr(use_cases.orchestrator, "run", fake_run)
+
+    reports = asyncio.run(
+        use_cases.run_collection_reports(
+            query="EGFR biomarkers",
+            provider=None,
+            collection="EGFR Program",
+            workflow_id="literature_review",
+        )
+    )
+
+    assert len(reports) == 1
+    assert reports[0].workflow_id == "literature_review"

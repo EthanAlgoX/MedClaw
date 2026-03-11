@@ -25,6 +25,24 @@ class MedicalResearchUseCases:
         report = await self.orchestrator.run(workflow_id, query, provider)
         return self.orchestrator.render(report)
 
+    async def run_collection(
+        self,
+        query: str,
+        provider: LLMProvider | None,
+        collection: str | None = None,
+        workflow_id: str | None = None,
+        all_preferred: bool = False,
+    ) -> list[str]:
+        """Run one or more workflows using collection preferences when available."""
+        reports = await self.run_collection_reports(
+            query=query,
+            provider=provider,
+            collection=collection,
+            workflow_id=workflow_id,
+            all_preferred=all_preferred,
+        )
+        return [self.orchestrator.render(report) for report in reports]
+
     async def run_workflow(
         self,
         workflow_id: str,
@@ -51,6 +69,54 @@ class MedicalResearchUseCases:
             collection=collection,
         )
 
+    async def run_collection_reports(
+        self,
+        query: str,
+        provider: LLMProvider | None,
+        collection: str | None = None,
+        workflow_id: str | None = None,
+        all_preferred: bool = False,
+    ) -> list:
+        """Run collection-driven workflows and return structured reports."""
+        workflow_ids = self._resolve_collection_run_workflows(
+            query=query,
+            collection=collection,
+            workflow_id=workflow_id,
+            all_preferred=all_preferred,
+        )
+        reports = []
+        for selected_workflow in workflow_ids:
+            reports.append(
+                await self.orchestrator.run(
+                    selected_workflow,
+                    query,
+                    provider,
+                    collection=collection,
+                )
+            )
+        return reports
+
     def list_workflows(self) -> list[dict[str, str]]:
         """List available typed workflows."""
         return self.orchestrator.list_workflows()
+
+    def _resolve_collection_run_workflows(
+        self,
+        query: str,
+        collection: str | None,
+        workflow_id: str | None,
+        all_preferred: bool,
+    ) -> list[str]:
+        """Resolve which workflows to execute for a collection-aware run."""
+        if workflow_id:
+            return [workflow_id]
+
+        preferred = self.orchestrator.resolve_collection_workflows(collection)
+        if preferred:
+            return preferred if all_preferred else [preferred[0]]
+
+        routed = self.router.route(query)
+        if routed is not None:
+            return [routed]
+
+        return ["evidence_brief"]

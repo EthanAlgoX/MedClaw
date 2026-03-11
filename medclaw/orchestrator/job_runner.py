@@ -67,6 +67,17 @@ class ResearchOrchestrator:
             for workflow_id, workflow in self.workflows.items()
         ]
 
+    def resolve_collection_workflows(self, collection: str | None) -> list[str]:
+        """Resolve preferred workflows for a collection, keeping only valid ids."""
+        collection_context = self._resolve_collection_context(collection)
+        if not collection_context:
+            return []
+
+        preferred = collection_context.get("preferred_workflows", [])
+        if not isinstance(preferred, list):
+            return []
+        return [workflow_id for workflow_id in preferred if workflow_id in self.workflows]
+
     def _resolve_collection_context(self, collection: str | None) -> dict[str, object] | None:
         """Load saved collection context when available and preserve ad-hoc collection names."""
         if not collection or not collection.strip():

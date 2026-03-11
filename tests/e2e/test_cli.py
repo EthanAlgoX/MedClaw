@@ -149,6 +149,7 @@ class TestCLI:
 
         assert result.returncode == 0
         assert "workflow" in result.stdout.lower() or "research" in result.stdout.lower()
+        assert "run" in result.stdout.lower()
 
     def test_research_workflows_command(self):
         """Test typed workflow listing works."""
@@ -177,6 +178,21 @@ class TestCLI:
         assert "--save-path" in result.stdout
         assert "--no-llm" in result.stdout
         assert "--collection" in result.stdout
+
+    def test_research_run_help_includes_collection_routing_flags(self):
+        """Collection-aware runner help should expose workflow selection flags."""
+        result = subprocess.run(
+            ["medclaw", "research", "run", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert result.returncode == 0
+        assert "--collection" in result.stdout
+        assert "--workflow" in result.stdout
+        assert "--all-preferred" in result.stdout
+        assert "--no-llm" in result.stdout
 
     def test_research_artifacts_command_lists_saved_reports(self, tmp_path, monkeypatch):
         """Research artifacts command should list stored report records."""
