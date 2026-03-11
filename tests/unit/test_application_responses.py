@@ -1,0 +1,111 @@
+"""Unit tests for application-layer response builders."""
+
+from medclaw.application.responses import (
+    build_artifact_list_response,
+    build_artifact_payload_list_response,
+    build_artifact_payload_response,
+    build_artifact_query_filters,
+    build_collection_list_response,
+    build_collection_response,
+    build_research_report_list_response,
+    build_research_report_response,
+)
+from medclaw.evidence.models import ResearchReport
+
+
+class TestApplicationResponses:
+    """Tests for response builder helpers."""
+
+    def test_build_research_report_responses(self):
+        report = ResearchReport(
+            workflow_id="literature_review",
+            question="KRAS inhibitors",
+            title="KRAS Review",
+            summary="Summary",
+        )
+
+        single = build_research_report_response(report)
+        many = build_research_report_list_response([report])
+
+        assert single.model_dump(mode="json")["report"]["workflow_id"] == "literature_review"
+        assert many.model_dump(mode="json")["total"] == 1
+
+    def test_build_artifact_responses(self):
+        filters = build_artifact_query_filters(kind="report", latest=True, limit=1)
+        record = {
+            "kind": "report",
+            "id": "report.json",
+            "path": "/tmp/report.json",
+            "filename": "report.json",
+            "collection": "KRAS Program",
+            "workflow_id": "literature_review",
+            "title": "KRAS Review",
+            "question": "KRAS inhibitors",
+            "generated_at": "2026-03-08T09:00:00+00:00",
+            "evidence_count": 1,
+            "citation_count": 1,
+            "summary_preview": "Summary",
+            "artifact_dir": "/tmp/report_artifacts",
+        }
+        payload = [
+            {
+                "source": "pubmed",
+                "title": "KRAS paper",
+                "identifier": "PMID:1",
+            }
+        ]
+
+        artifact_list = build_artifact_list_response([record], filters)
+        artifact_payload = build_artifact_payload_response(
+            target="report.json",
+            artifact="citations",
+            record=record,
+            path="/tmp/report_artifacts/citations.json",
+            payload=payload,
+        )
+        artifact_payload_list = build_artifact_payload_list_response([artifact_payload], filters=filters)
+
+        assert artifact_list.model_dump(mode="json")["items"][0]["kind"] == "report"
+        assert artifact_payload.model_dump(mode="json")["payload"][0]["identifier"] == "PMID:1"
+        assert artifact_payload_list.model_dump(mode="json")["total"] == 1
+
+    def test_build_collection_responses(self):
+        manifest = {
+            "name": "EGFR Program",
+            "slug": "egfr-program",
+            "objective": "Track EGFR biomarker evidence",
+            "disease_area": "Thoracic oncology",
+            "owner": "Biomarker Team",
+            "tags": ["egfr"],
+            "preferred_workflows": ["evidence_brief"],
+            "created_at": "",
+            "updated_at": "",
+        }
+        record = {
+            "collection": "EGFR Program",
+            "slug": "egfr-program",
+            "objective": "Track EGFR biomarker evidence",
+            "disease_area": "Thoracic oncology",
+            "owner": "Biomarker Team",
+            "tags": ["egfr"],
+            "preferred_workflows": ["evidence_brief"],
+            "created_at": "",
+            "updated_at": "",
+            "report_count": 1,
+            "evidence_count": 2,
+            "citation_count": 2,
+            "latest_generated_at": "2026-03-08T09:00:00+00:00",
+            "latest_bundle_generated_at": "",
+            "latest_bundle_markdown_path": "",
+            "latest_bundle_json_path": "",
+            "workflows": ["evidence_brief"],
+            "titles": ["Biomarker Brief"],
+        }
+
+        collection_manifest = build_collection_response(manifest)
+        collection_record = build_collection_response(record)
+        collection_list = build_collection_list_response([record], limit=20)
+
+        assert collection_manifest.model_dump(mode="json")["item"]["slug"] == "egfr-program"
+        assert collection_record.model_dump(mode="json")["item"]["report_count"] == 1
+        assert collection_list.model_dump(mode="json")["items"][0]["collection"] == "EGFR Program"
