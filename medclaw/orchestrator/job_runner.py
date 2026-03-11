@@ -8,7 +8,7 @@ from medclaw.evidence.models import ResearchReport
 from medclaw.evidence.store import EvidenceStore
 from medclaw.policy.medical_safety import MedicalSafetyPolicy
 from medclaw.providers.base import LLMProvider
-from medclaw.reporting.briefs import render_research_report
+from medclaw.reporting.briefs import render_collection_report_bundle, render_research_report
 from medclaw.workflows import (
     ClinicalTrialLandscapeWorkflow,
     DrugTargetLandscapeWorkflow,
@@ -77,6 +77,11 @@ class ResearchOrchestrator:
         if not isinstance(preferred, list):
             return []
         return [workflow_id for workflow_id in preferred if workflow_id in self.workflows]
+
+    def save_collection_bundle(self, reports: list[ResearchReport]) -> dict[str, Path]:
+        """Persist a collection-level synthesis bundle across multiple workflow reports."""
+        markdown_summary = render_collection_report_bundle(reports)
+        return self.evidence_store.save_collection_bundle_artifacts(reports, markdown_summary)
 
     def _resolve_collection_context(self, collection: str | None) -> dict[str, object] | None:
         """Load saved collection context when available and preserve ad-hoc collection names."""

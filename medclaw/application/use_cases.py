@@ -76,6 +76,7 @@ class MedicalResearchUseCases:
         collection: str | None = None,
         workflow_id: str | None = None,
         all_preferred: bool = False,
+        persist_bundle: bool = False,
     ) -> list:
         """Run collection-driven workflows and return structured reports."""
         workflow_ids = self._resolve_collection_run_workflows(
@@ -94,6 +95,12 @@ class MedicalResearchUseCases:
                     collection=collection,
                 )
             )
+        if persist_bundle and len(reports) > 1:
+            bundle_artifacts = self.orchestrator.save_collection_bundle(reports)
+            bundle_paths = {name: str(path) for name, path in bundle_artifacts.items()}
+            for report in reports:
+                report.metadata["bundle_artifact_paths"] = bundle_paths
+                report.metadata["bundle_saved_path"] = bundle_paths["bundle_markdown"]
         return reports
 
     def list_workflows(self) -> list[dict[str, str]]:

@@ -186,6 +186,25 @@ class TestEvidenceStore:
                 metadata={"collection": "KRAS Program"},
             )
         )
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
 
         collections = store.list_collection_records(limit=10)
 
@@ -193,6 +212,7 @@ class TestEvidenceStore:
         assert collections[0]["collection"] == "KRAS Program"
         assert collections[0]["report_count"] == 2
         assert collections[0]["owner"] == "Translational Team"
+        assert collections[0]["latest_bundle_markdown_path"].endswith("bundle_summary.md")
         assert set(collections[0]["workflows"]) == {"literature_review", "evidence_brief"}
 
     def test_collection_manifest_round_trip_preserves_metadata(self, temp_workspace: Path):
@@ -267,3 +287,43 @@ class TestEvidenceStore:
             assert "Unsupported artifact" in str(exc)
         else:
             raise AssertionError("Expected ValueError for unsupported artifact")
+
+    def test_save_collection_bundle_artifacts_writes_markdown_and_json(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        reports = [
+            ResearchReport(
+                workflow_id="study_design",
+                question="KRAS inhibitors",
+                title="Study Design Assistant: KRAS inhibitors",
+                summary="Summary one",
+                metadata={
+                    "collection": "KRAS Program",
+                    "collection_objective": "Track resistance mechanisms",
+                    "saved_path": "/tmp/report-1.json",
+                },
+            ),
+            ResearchReport(
+                workflow_id="evidence_brief",
+                question="KRAS inhibitors",
+                title="Evidence Brief: KRAS inhibitors",
+                summary="Summary two",
+                metadata={
+                    "collection": "KRAS Program",
+                    "collection_objective": "Track resistance mechanisms",
+                    "saved_path": "/tmp/report-2.json",
+                },
+            ),
+        ]
+
+        artifact_paths = store.save_collection_bundle_artifacts(
+            reports=reports,
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        bundle_records = store.list_collection_bundle_records(limit=10)
+
+        assert artifact_paths["bundle_markdown"].exists()
+        assert artifact_paths["bundle_json"].exists()
+        assert artifact_paths["metadata"].exists()
+        assert bundle_records[0]["kind"] == "collection_bundle"
+        assert bundle_records[0]["collection"] == "KRAS Program"
+        assert bundle_records[0]["bundle_markdown_path"].endswith("bundle_summary.md")

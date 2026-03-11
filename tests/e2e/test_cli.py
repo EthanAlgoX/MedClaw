@@ -352,6 +352,25 @@ class TestCLI:
             generated_at="2026-03-06T09:00:00+00:00",
             collection="KRAS Program",
         )
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
         monkeypatch.setenv("HOME", str(test_home))
 
         result = subprocess.run(
@@ -367,6 +386,7 @@ class TestCLI:
         assert payload[0]["collection"] == "KRAS Program"
         assert payload[0]["report_count"] == 2
         assert payload[0]["owner"] == "Translational Team"
+        assert payload[0]["latest_bundle_markdown_path"].endswith("bundle_summary.md")
 
     def test_research_collection_set_and_show_commands_manage_manifest(self, tmp_path, monkeypatch):
         """Research collection manifest commands should create and retrieve project metadata."""

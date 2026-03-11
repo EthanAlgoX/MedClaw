@@ -234,6 +234,9 @@ def _emit_research_reports(
     if save_path_only:
         for report in reports:
             console.print(str(report.metadata.get("saved_path", "")))
+        bundle_saved_path = reports[0].metadata.get("bundle_saved_path", "") if reports else ""
+        if bundle_saved_path:
+            console.print(str(bundle_saved_path))
         return
     if as_json:
         _write_json([report.model_dump(mode="json") for report in reports])
@@ -243,6 +246,9 @@ def _emit_research_reports(
         from medclaw.reporting.briefs import render_collection_report_bundle
 
         console.print(Markdown(render_collection_report_bundle(reports)))
+        bundle_saved_path = reports[0].metadata.get("bundle_saved_path", "")
+        if bundle_saved_path:
+            console.print(f"\nBundle summary saved to: {bundle_saved_path}")
         return
 
     _emit_research_report(reports[0])
@@ -293,6 +299,8 @@ def _emit_collection_manifest(record: dict) -> None:
         console.print(f"preferred workflows: {', '.join(record['preferred_workflows'])}")
     if record["workflows"]:
         console.print(f"active workflows: {', '.join(record['workflows'])}")
+    if record.get("latest_bundle_markdown_path"):
+        console.print(f"latest bundle: {record['latest_bundle_markdown_path']}")
 
 
 @app.command()
@@ -369,6 +377,7 @@ def research_run(
             collection=collection,
             workflow_id=workflow,
             all_preferred=all_preferred,
+            persist_bundle=True,
         )
     )
     _emit_research_reports(reports, as_json=as_json, save_path_only=save_path)
@@ -468,6 +477,8 @@ def research_collections(
         if record["tags"]:
             console.print(f"      tags: {', '.join(record['tags'])}")
         console.print(f"      titles: {', '.join(record['titles'][:3])}")
+        if record["latest_bundle_markdown_path"]:
+            console.print(f"      latest bundle: {record['latest_bundle_markdown_path']}")
 
 
 @research_app.command("collection-set")

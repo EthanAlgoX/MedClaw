@@ -174,9 +174,43 @@ class EvidenceStore:
                 "evidence_count": 0,
                 "citation_count": 0,
                 "latest_generated_at": "",
+                "latest_bundle_generated_at": "",
+                "latest_bundle_markdown_path": "",
+                "latest_bundle_json_path": "",
                 "workflows": [],
                 "titles": [],
             }
+
+        for bundle_record in self.list_collection_bundle_records(limit=1000):
+            key = bundle_record["collection_slug"]
+            entry = collections.get(key)
+            if entry is None:
+                collections[key] = {
+                    "collection": bundle_record["collection"],
+                    "slug": key,
+                    "objective": bundle_record["collection_objective"],
+                    "disease_area": "",
+                    "owner": "",
+                    "tags": [],
+                    "preferred_workflows": [],
+                    "created_at": "",
+                    "updated_at": "",
+                    "report_count": 0,
+                    "evidence_count": 0,
+                    "citation_count": 0,
+                    "latest_generated_at": "",
+                    "latest_bundle_generated_at": bundle_record["generated_at"],
+                    "latest_bundle_markdown_path": bundle_record["bundle_markdown_path"],
+                    "latest_bundle_json_path": bundle_record["bundle_json_path"],
+                    "workflows": [],
+                    "titles": [],
+                }
+                continue
+
+            if bundle_record["generated_at"] > entry["latest_bundle_generated_at"]:
+                entry["latest_bundle_generated_at"] = bundle_record["generated_at"]
+                entry["latest_bundle_markdown_path"] = bundle_record["bundle_markdown_path"]
+                entry["latest_bundle_json_path"] = bundle_record["bundle_json_path"]
 
         for record in self.filter_report_records(limit=1000):
             collection = record["collection"]
@@ -199,6 +233,9 @@ class EvidenceStore:
                     "evidence_count": record["evidence_count"],
                     "citation_count": record["citation_count"],
                     "latest_generated_at": record["generated_at"],
+                    "latest_bundle_generated_at": "",
+                    "latest_bundle_markdown_path": "",
+                    "latest_bundle_json_path": "",
                     "workflows": [record["workflow_id"]],
                     "titles": [record["title"]],
                 }
@@ -216,12 +253,82 @@ class EvidenceStore:
         ordered = sorted(
             collections.values(),
             key=lambda item: (
-                item["latest_generated_at"] or item["updated_at"] or item["created_at"],
+                item["latest_generated_at"]
+                or item["latest_bundle_generated_at"]
+                or item["updated_at"]
+                or item["created_at"],
                 item["collection"],
             ),
             reverse=True,
         )
         return ordered[:limit]
+
+    def save_collection_bundle_artifacts(
+        self,
+        reports: list[ResearchReport],
+        markdown_summary: str,
+    ) -> dict[str, Path]:
+        """Save a collection-level synthesis bundle for multiple workflow reports."""
+        if not reports:
+            raise ValueError("Cannot save a collection bundle without reports")
+
+        first_report = reports[0]
+        collection = str(first_report.metadata.get("collection", "")).strip() or "research-bundle"
+        collection_slug = self._slugify_collection_name(collection)
+        bundle_slug = self._build_bundle_slug(collection_slug)
+        artifact_dir = self.reports_path / f"{bundle_slug}_artifacts"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        markdown_path = artifact_dir / "bundle_summary.md"
+        markdown_path.write_text(markdown_summary, encoding="utf-8")
+
+        bundle_payload = self._collection_bundle_payload(reports, markdown_path)
+        bundle_json_path = artifact_dir / "bundle_summary.json"
+        bundle_json_path.write_text(
+            json.dumps(bundle_payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        metadata_path = artifact_dir / "metadata.json"
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "kind": "collection_bundle",
+                    "collection": bundle_payload["collection"],
+                    "collection_slug": bundle_payload["collection_slug"],
+                    "generated_at": bundle_payload["generated_at"],
+                    "artifact_dir": str(artifact_dir),
+                    "bundle_markdown_path": str(markdown_path),
+                    "bundle_json_path": str(bundle_json_path),
+                    "report_count": bundle_payload["report_count"],
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        return {
+            "artifact_dir": artifact_dir,
+            "bundle_markdown": markdown_path,
+            "bundle_json": bundle_json_path,
+            "metadata": metadata_path,
+        }
+
+    def list_collection_bundle_records(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List saved collection synthesis bundles, newest first."""
+        records = []
+        for metadata_path in sorted(self.reports_path.glob("*_artifacts/metadata.json"), reverse=True):
+            try:
+                payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if payload.get("kind") != "collection_bundle":
+                continue
+            records.append(payload)
+            if len(records) >= limit:
+                break
+        return records
 
     def save_collection_manifest(
         self,
@@ -333,6 +440,10 @@ class EvidenceStore:
         filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{slug}.json"
         return self.reports_path / filename
 
+    def _build_bundle_slug(self, collection_slug: str) -> str:
+        """Build a timestamped collection bundle slug."""
+        return f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{collection_slug}_collection-bundle"
+
     def _collect_citations(self, report: ResearchReport) -> list[Citation]:
         """Collect and deduplicate citations across evidence items."""
         citations: list[Citation] = []
@@ -361,6 +472,42 @@ class EvidenceStore:
             "citation_count": len(self._collect_citations(report)),
             "summary_preview": self._summary_preview(report.summary),
             "artifact_dir": str(artifact_paths["artifact_dir"]),
+        }
+
+    def _collection_bundle_payload(
+        self,
+        reports: list[ResearchReport],
+        markdown_path: Path,
+    ) -> dict[str, Any]:
+        """Build a JSON payload for a collection synthesis bundle."""
+        first_report = reports[0]
+        collection = str(first_report.metadata.get("collection", "")).strip() or "research-bundle"
+        collection_slug = self._slugify_collection_name(collection)
+        generated_at = datetime.now(timezone.utc).isoformat()
+        workflow_ids = [report.workflow_id for report in reports]
+        report_paths = [
+            str(report.metadata["saved_path"])
+            for report in reports
+            if report.metadata.get("saved_path")
+        ]
+        evidence_count = sum(len(report.evidence) for report in reports)
+        citation_count = sum(
+            len(self._collect_citations(report))
+            for report in reports
+        )
+        return {
+            "kind": "collection_bundle",
+            "collection": collection,
+            "collection_slug": collection_slug,
+            "collection_objective": first_report.metadata.get("collection_objective", ""),
+            "generated_at": generated_at,
+            "report_count": len(reports),
+            "workflow_ids": workflow_ids,
+            "report_titles": [report.title for report in reports],
+            "report_paths": report_paths,
+            "evidence_count": evidence_count,
+            "citation_count": citation_count,
+            "bundle_markdown_path": str(markdown_path),
         }
 
     def _summary_preview(self, summary: str, max_length: int = 160) -> str:

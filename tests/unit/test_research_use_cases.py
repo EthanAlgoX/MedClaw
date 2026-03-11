@@ -276,6 +276,43 @@ def test_run_collection_reports_can_execute_all_preferred_workflows(temp_workspa
     assert [report.workflow_id for report in reports] == ["study_design", "evidence_brief"]
 
 
+def test_run_collection_reports_can_persist_bundle_artifacts(temp_workspace: Path, monkeypatch):
+    """Collection-driven batch runs should persist a bundle summary artifact."""
+    use_cases = MedicalResearchUseCases(temp_workspace)
+    use_cases.orchestrator.evidence_store.save_collection_manifest(
+        name="EGFR Program",
+        preferred_workflows=["study_design", "evidence_brief"],
+    )
+
+    async def fake_run(workflow_id: str, query: str, provider, collection: str | None = None):
+        return ResearchReport(
+            workflow_id=workflow_id,
+            question=query,
+            title=f"Stub: {workflow_id}",
+            summary="Summary",
+            metadata={
+                "collection": collection or "",
+                "saved_path": str(temp_workspace / f"{workflow_id}.json"),
+            },
+        )
+
+    monkeypatch.setattr(use_cases.orchestrator, "run", fake_run)
+
+    reports = asyncio.run(
+        use_cases.run_collection_reports(
+            query="EGFR biomarkers",
+            provider=None,
+            collection="EGFR Program",
+            all_preferred=True,
+            persist_bundle=True,
+        )
+    )
+
+    assert len(reports) == 2
+    assert reports[0].metadata["bundle_saved_path"].endswith("bundle_summary.md")
+    assert reports[0].metadata["bundle_artifact_paths"]["bundle_json"].endswith("bundle_summary.json")
+
+
 def test_run_collection_reports_can_override_collection_preference(temp_workspace: Path, monkeypatch):
     """Explicit workflow selection should override collection preferences."""
     use_cases = MedicalResearchUseCases(temp_workspace)
