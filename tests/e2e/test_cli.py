@@ -665,6 +665,52 @@ class TestCLI:
         payload = json.loads(result.stdout)
         assert payload[0]["identifier"] == "PMID:1"
 
+    def test_research_latest_command_rejects_incompatible_artifact_for_bundle(self, tmp_path, monkeypatch):
+        """Latest shortcut should fail cleanly when artifact kind does not match the latest record."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:00:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "latest",
+                "--kind",
+                "bundle",
+                "--artifact",
+                "evidence",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 1
+        assert "Unsupported artifact 'evidence' for collection_bundle" in result.stdout
+
     def test_research_artifacts_command_supports_search(self, tmp_path, monkeypatch):
         """Research artifacts command should filter reports by search text."""
         test_home = tmp_path / "test_home"
@@ -1029,6 +1075,52 @@ class TestCLI:
                 bundle_paths["artifact_dir"].name,
                 "--artifact",
                 "bundle-json",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["kind"] == "collection_bundle"
+        assert payload["collection"] == "KRAS Program"
+
+    def test_research_show_command_can_return_bundle_metadata(self, tmp_path, monkeypatch):
+        """Research show command should resolve shared metadata artifacts for bundle ids."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        bundle_paths = store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "show",
+                bundle_paths["artifact_dir"].name,
+                "--artifact",
+                "metadata",
                 "--json",
             ],
             capture_output=True,

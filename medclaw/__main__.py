@@ -31,6 +31,12 @@ from medclaw.utils.logging import setup_logging
 app = typer.Typer(help="MedClaw - AI-powered medical research assistant")
 research_app = typer.Typer(help="Typed medical research workflows")
 console = Console()
+REPORT_ARTIFACTS = ("report", "evidence", "citations", "metadata")
+BUNDLE_ARTIFACTS = ("bundle_markdown", "bundle_json", "metadata")
+CLI_ARTIFACTS = ("report", "evidence", "citations", "metadata", "bundle_markdown", "bundle_json")
+CLI_ARTIFACT_HELP = (
+    "Specific artifact: report, evidence, citations, metadata, bundle-markdown, bundle-json."
+)
 
 app.add_typer(research_app, name="research")
 
@@ -276,11 +282,42 @@ def _normalize_artifact_option(artifact: str | None) -> str | None:
     """Normalize CLI artifact option names."""
     if artifact is None:
         return None
-    return artifact.strip().lower().replace("-", "_")
+    normalized = artifact.strip().lower().replace("-", "_")
+    if normalized not in CLI_ARTIFACTS:
+        supported = ", ".join(name.replace("_", "-") for name in CLI_ARTIFACTS)
+        raise ValueError(f"Unsupported artifact '{artifact}'. Choose from: {supported}")
+    return normalized
+
+
+def _artifact_choices_for_kind(kind: str) -> tuple[str, ...]:
+    """Return supported artifact names for a unified artifact kind."""
+    if kind == "collection_bundle":
+        return BUNDLE_ARTIFACTS
+    if kind == "report":
+        return REPORT_ARTIFACTS
+    raise ValueError(f"Unsupported artifact kind: {kind}")
+
+
+def _format_artifact_choices(choices: tuple[str, ...]) -> str:
+    """Render artifact choices in CLI-friendly spelling."""
+    return ", ".join(choice.replace("_", "-") for choice in choices)
+
+
+def _artifact_paths_for_record(record: dict, store: EvidenceStore) -> dict[str, Path]:
+    """Return the artifact path bundle for a unified artifact record."""
+    if record["kind"] == "collection_bundle":
+        return store.get_bundle_artifact_paths(record["id"])
+    return store.get_artifact_paths(record["id"])
 
 
 def _artifact_payload_for_record(record: dict, store: EvidenceStore, artifact: str):
     """Read a specific artifact payload for a unified artifact record."""
+    supported = _artifact_choices_for_kind(record["kind"])
+    if artifact not in supported:
+        raise ValueError(
+            f"Unsupported artifact '{artifact.replace('_', '-')}' for {record['kind']}. "
+            f"Choose from: {_format_artifact_choices(supported)}"
+        )
     if record["kind"] == "collection_bundle":
         return store.read_bundle_artifact(record["id"], artifact=artifact)
     return store.read_artifact(record["id"], artifact=artifact)
@@ -288,13 +325,18 @@ def _artifact_payload_for_record(record: dict, store: EvidenceStore, artifact: s
 
 def _artifact_path_for_record(record: dict, store: EvidenceStore, artifact: str) -> str:
     """Resolve a specific artifact path for a unified artifact record."""
-    if record["kind"] == "collection_bundle":
-        paths = store.get_bundle_artifact_paths(record["id"])
-    else:
-        paths = store.get_artifact_paths(record["id"])
+    supported = _artifact_choices_for_kind(record["kind"])
+    if artifact not in supported:
+        raise ValueError(
+            f"Unsupported artifact '{artifact.replace('_', '-')}' for {record['kind']}. "
+            f"Choose from: {_format_artifact_choices(supported)}"
+        )
+    paths = _artifact_paths_for_record(record, store)
     if artifact not in paths:
-        supported = ", ".join(sorted(paths))
-        raise ValueError(f"Unsupported artifact '{artifact}' for {record['kind']}. Choose from: {supported}")
+        raise ValueError(
+            f"Unsupported artifact '{artifact.replace('_', '-')}' for {record['kind']}. "
+            f"Choose from: {_format_artifact_choices(supported)}"
+        )
     return str(paths[artifact])
 
 
@@ -303,6 +345,25 @@ def _artifact_primary_path(record: dict) -> str:
     if record["kind"] == "collection_bundle":
         return record.get("bundle_markdown_path", "")
     return record.get("path", "")
+
+
+def _read_show_artifact(store: EvidenceStore, target: str, artifact: str) -> tuple[str, object]:
+    """Read a report or bundle artifact for the show command."""
+    normalized_artifact = _normalize_artifact_option(artifact) or "report"
+    if normalized_artifact in {"bundle_markdown", "bundle_json"}:
+        return normalized_artifact, store.read_bundle_artifact(target, artifact=normalized_artifact)
+
+    if normalized_artifact in {"evidence", "citations"}:
+        return normalized_artifact, store.read_artifact(target, artifact=normalized_artifact)
+
+    try:
+        return normalized_artifact, store.read_artifact(target, artifact=normalized_artifact)
+    except (FileNotFoundError, ValueError) as report_error:
+        bundle_artifact = "bundle_markdown" if normalized_artifact == "report" else normalized_artifact
+        try:
+            return bundle_artifact, store.read_bundle_artifact(target, artifact=bundle_artifact)
+        except (FileNotFoundError, ValueError):
+            raise report_error
 
 
 def _write_lines(lines: list[str]) -> None:
@@ -553,7 +614,7 @@ def research_latest(
     artifact: str | None = typer.Option(
         None,
         "--artifact",
-        help="Specific artifact: report, evidence, citations, metadata, bundle-markdown, bundle-json.",
+        help=CLI_ARTIFACT_HELP,
     ),
     workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
     collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
@@ -576,8 +637,8 @@ def research_latest(
 ):
     """Show the latest saved research artifact."""
     store = _get_evidence_store()
-    normalized_artifact = _normalize_artifact_option(artifact)
     try:
+        normalized_artifact = _normalize_artifact_option(artifact)
         records = store.list_artifact_records(
             kind=kind,
             workflow_id=workflow,
@@ -768,7 +829,7 @@ def research_show(
     artifact: str = typer.Option(
         "report",
         "--artifact",
-        help="One of: report, evidence, citations, metadata, bundle-markdown, bundle-json.",
+        help=CLI_ARTIFACT_HELP,
     ),
     view: str = typer.Option(
         "full",
@@ -779,20 +840,11 @@ def research_show(
 ):
     """Show a saved research report or one of its companion artifacts."""
     store = _get_evidence_store()
-    normalized_artifact = artifact.replace("-", "_")
     try:
-        payload = store.read_artifact(report, artifact=normalized_artifact)
+        normalized_artifact, payload = _read_show_artifact(store, report, artifact)
     except (FileNotFoundError, ValueError) as e:
-        if normalized_artifact == "report":
-            try:
-                payload = store.read_bundle_artifact(report, artifact="bundle_markdown")
-                normalized_artifact = "bundle_markdown"
-            except (FileNotFoundError, ValueError):
-                console.print(f"[red]Error:[/red] {e}")
-                raise typer.Exit(1)
-        else:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1)
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
 
     if normalized_artifact == "bundle_markdown":
         if as_json:
