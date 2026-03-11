@@ -393,10 +393,10 @@ def research_artifacts(
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of records."),
 ):
-    """List saved research reports."""
+    """List saved research reports and collection bundles."""
     store = _get_evidence_store()
     try:
-        records = store.filter_report_records(
+        records = store.list_artifact_records(
             query=search,
             workflow_id=workflow,
             collection=collection,
@@ -432,6 +432,21 @@ def research_artifacts(
     console.print(f"[bold]Research Artifacts{suffix}:[/bold]")
     for record in records:
         generated_at = record["generated_at"].split("T", 1)[0]
+        if record["kind"] == "collection_bundle":
+            console.print(
+                "  - "
+                f"{record['id']} [bundle] "
+                f"date={generated_at} reports={record['report_count']} "
+                f"evidence={record['evidence_count']} citations={record['citation_count']}"
+            )
+            if record["collection"]:
+                console.print(f"      collection: {record['collection']}")
+            console.print(f"      title: {record['title']}")
+            console.print(f"      workflows: {', '.join(record['workflow_ids'])}")
+            if record["summary_preview"]:
+                console.print(f"      summary: {record['summary_preview']}")
+            continue
+
         console.print(
             "  - "
             f"{record['filename']} [{record['workflow_id']}] "
@@ -563,7 +578,7 @@ def research_show(
     artifact: str = typer.Option(
         "report",
         "--artifact",
-        help="One of: report, evidence, citations, metadata.",
+        help="One of: report, evidence, citations, metadata, bundle-markdown, bundle-json.",
     ),
     view: str = typer.Option(
         "full",
@@ -574,13 +589,29 @@ def research_show(
 ):
     """Show a saved research report or one of its companion artifacts."""
     store = _get_evidence_store()
+    normalized_artifact = artifact.replace("-", "_")
     try:
-        payload = store.read_artifact(report, artifact=artifact)
+        payload = store.read_artifact(report, artifact=normalized_artifact)
     except (FileNotFoundError, ValueError) as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        if normalized_artifact == "report":
+            try:
+                payload = store.read_bundle_artifact(report, artifact="bundle_markdown")
+                normalized_artifact = "bundle_markdown"
+            except (FileNotFoundError, ValueError):
+                console.print(f"[red]Error:[/red] {e}")
+                raise typer.Exit(1)
+        else:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
 
-    if as_json or artifact != "report":
+    if normalized_artifact == "bundle_markdown":
+        if as_json:
+            _write_json({"markdown": payload})
+            return
+        console.print(Markdown(payload))
+        return
+
+    if as_json or normalized_artifact != "report":
         _write_json(payload)
         return
 

@@ -327,3 +327,71 @@ class TestEvidenceStore:
         assert bundle_records[0]["kind"] == "collection_bundle"
         assert bundle_records[0]["collection"] == "KRAS Program"
         assert bundle_records[0]["bundle_markdown_path"].endswith("bundle_summary.md")
+
+    def test_list_artifact_records_combines_reports_and_bundles(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        report_path = store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="evidence_brief",
+                question="KRAS biomarkers",
+                title="KRAS Biomarker Brief",
+                summary="Summary",
+                generated_at="2026-03-06T09:00:00+00:00",
+                metadata={"collection": "KRAS Program"},
+            )
+        )["report"]
+        bundle_paths = store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+
+        records = store.list_artifact_records(collection="KRAS Program", limit=10)
+
+        assert len(records) == 2
+        assert {record["kind"] for record in records} == {"report", "collection_bundle"}
+        assert any(record["id"] == report_path.name for record in records)
+        assert any(record["id"] == bundle_paths["artifact_dir"].name for record in records)
+
+    def test_read_bundle_artifact_supports_markdown_and_json(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        bundle_paths = store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+
+        markdown_payload = store.read_bundle_artifact(bundle_paths["artifact_dir"].name, artifact="bundle_markdown")
+        json_payload = store.read_bundle_artifact(bundle_paths["artifact_dir"], artifact="bundle_json")
+
+        assert markdown_payload.startswith("# Collection Brief: KRAS Program")
+        assert json_payload["kind"] == "collection_bundle"
+        assert json_payload["collection"] == "KRAS Program"

@@ -155,6 +155,36 @@ class EvidenceStore:
                 break
         return records
 
+    def list_artifact_records(
+        self,
+        query: str | None = None,
+        workflow_id: str | None = None,
+        collection: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List saved report and bundle artifacts under a unified index."""
+        report_records = self.filter_report_records(
+            query=query,
+            workflow_id=workflow_id,
+            collection=collection,
+            since=since,
+            until=until,
+            limit=limit * 2,
+        )
+        bundle_records = self.filter_collection_bundle_records(
+            query=query,
+            workflow_id=workflow_id,
+            collection=collection,
+            since=since,
+            until=until,
+            limit=limit * 2,
+        )
+        records = report_records + bundle_records
+        records.sort(key=lambda record: (record["generated_at"], record["kind"]), reverse=True)
+        return records[:limit]
+
     def list_collection_records(self, limit: int = 50) -> list[dict[str, Any]]:
         """Aggregate saved reports by collection."""
         collections: dict[str, dict[str, Any]] = {}
@@ -182,13 +212,15 @@ class EvidenceStore:
             }
 
         for bundle_record in self.list_collection_bundle_records(limit=1000):
-            key = bundle_record["collection_slug"]
+            key = bundle_record.get("collection_slug", "")
+            if not key:
+                continue
             entry = collections.get(key)
             if entry is None:
                 collections[key] = {
-                    "collection": bundle_record["collection"],
+                    "collection": bundle_record.get("collection", key),
                     "slug": key,
-                    "objective": bundle_record["collection_objective"],
+                    "objective": bundle_record.get("collection_objective", ""),
                     "disease_area": "",
                     "owner": "",
                     "tags": [],
@@ -199,18 +231,18 @@ class EvidenceStore:
                     "evidence_count": 0,
                     "citation_count": 0,
                     "latest_generated_at": "",
-                    "latest_bundle_generated_at": bundle_record["generated_at"],
-                    "latest_bundle_markdown_path": bundle_record["bundle_markdown_path"],
-                    "latest_bundle_json_path": bundle_record["bundle_json_path"],
+                    "latest_bundle_generated_at": bundle_record.get("generated_at", ""),
+                    "latest_bundle_markdown_path": bundle_record.get("bundle_markdown_path", ""),
+                    "latest_bundle_json_path": bundle_record.get("bundle_json_path", ""),
                     "workflows": [],
                     "titles": [],
                 }
                 continue
 
-            if bundle_record["generated_at"] > entry["latest_bundle_generated_at"]:
-                entry["latest_bundle_generated_at"] = bundle_record["generated_at"]
-                entry["latest_bundle_markdown_path"] = bundle_record["bundle_markdown_path"]
-                entry["latest_bundle_json_path"] = bundle_record["bundle_json_path"]
+            if bundle_record.get("generated_at", "") > entry["latest_bundle_generated_at"]:
+                entry["latest_bundle_generated_at"] = bundle_record.get("generated_at", "")
+                entry["latest_bundle_markdown_path"] = bundle_record.get("bundle_markdown_path", "")
+                entry["latest_bundle_json_path"] = bundle_record.get("bundle_json_path", "")
 
         for record in self.filter_report_records(limit=1000):
             collection = record["collection"]
@@ -301,6 +333,11 @@ class EvidenceStore:
                     "bundle_markdown_path": str(markdown_path),
                     "bundle_json_path": str(bundle_json_path),
                     "report_count": bundle_payload["report_count"],
+                    "evidence_count": bundle_payload["evidence_count"],
+                    "citation_count": bundle_payload["citation_count"],
+                    "workflow_ids": bundle_payload["workflow_ids"],
+                    "report_titles": bundle_payload["report_titles"],
+                    "collection_objective": bundle_payload["collection_objective"],
                 },
                 indent=2,
                 ensure_ascii=False,
@@ -326,6 +363,51 @@ class EvidenceStore:
             if payload.get("kind") != "collection_bundle":
                 continue
             records.append(payload)
+            if len(records) >= limit:
+                break
+        return records
+
+    def filter_collection_bundle_records(
+        self,
+        query: str | None = None,
+        workflow_id: str | None = None,
+        collection: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Filter saved collection bundle records."""
+        lowered = query.lower().strip() if query else ""
+        normalized_workflow = workflow_id.strip().lower() if workflow_id else ""
+        normalized_collection = collection.strip().lower() if collection else ""
+        since_date = self._parse_date_boundary(since, end_of_day=False) if since else None
+        until_date = self._parse_date_boundary(until, end_of_day=True) if until else None
+
+        records = []
+        for payload in self.list_collection_bundle_records(limit=limit * 4):
+            record = self._bundle_record(payload)
+            if normalized_workflow and normalized_workflow != "collection_bundle":
+                continue
+            if normalized_collection and record["collection"].lower() != normalized_collection:
+                continue
+            if lowered:
+                haystack = " ".join(
+                    [
+                        record["filename"],
+                        record["collection"],
+                        record["title"],
+                        record["summary_preview"],
+                        " ".join(record["workflow_ids"]),
+                    ]
+                ).lower()
+                if lowered not in haystack:
+                    continue
+            generated_at = self._parse_generated_at(record["generated_at"])
+            if since_date and generated_at < since_date:
+                continue
+            if until_date and generated_at > until_date:
+                continue
+            records.append(record)
             if len(records) >= limit:
                 break
         return records
@@ -401,10 +483,10 @@ class EvidenceStore:
     def resolve_report_path(self, path: Path | str) -> Path:
         """Resolve a report path from an absolute path, relative path, or filename."""
         candidate = Path(path)
-        if candidate.exists():
+        if candidate.exists() and candidate.is_file():
             return candidate
         report_path = self.reports_path / candidate.name
-        if report_path.exists():
+        if report_path.exists() and report_path.is_file():
             return report_path
         raise FileNotFoundError(f"Could not find research report: {path}")
 
@@ -420,8 +502,20 @@ class EvidenceStore:
             "metadata": artifact_dir / "metadata.json",
         }
 
+    def get_bundle_artifact_paths(self, path: Path | str) -> dict[str, Path]:
+        """Return the file bundle associated with a saved collection summary."""
+        artifact_dir = self.resolve_bundle_artifact_dir(path)
+        return {
+            "artifact_dir": artifact_dir,
+            "bundle_markdown": artifact_dir / "bundle_summary.md",
+            "bundle_json": artifact_dir / "bundle_summary.json",
+            "metadata": artifact_dir / "metadata.json",
+        }
+
     def read_artifact(self, path: Path | str, artifact: str = "report") -> Any:
         """Read a specific artifact payload."""
+        if artifact in {"bundle_markdown", "bundle_json"}:
+            return self.read_bundle_artifact(path, artifact=artifact)
         artifact_paths = self.get_artifact_paths(path)
         if artifact not in artifact_paths:
             supported = ", ".join(sorted(artifact_paths))
@@ -432,6 +526,19 @@ class EvidenceStore:
         if artifact == "report":
             report = self.load_report(target)
             return report.model_dump(mode="json")
+        return json.loads(target.read_text(encoding="utf-8"))
+
+    def read_bundle_artifact(self, path: Path | str, artifact: str = "bundle_markdown") -> Any:
+        """Read a saved collection bundle artifact."""
+        artifact_paths = self.get_bundle_artifact_paths(path)
+        if artifact not in artifact_paths:
+            supported = ", ".join(sorted(artifact_paths))
+            raise ValueError(f"Unsupported bundle artifact '{artifact}'. Choose from: {supported}")
+        target = artifact_paths[artifact]
+        if artifact == "artifact_dir":
+            return str(target)
+        if artifact == "bundle_markdown":
+            return target.read_text(encoding="utf-8")
         return json.loads(target.read_text(encoding="utf-8"))
 
     def _build_report_path(self, report: ResearchReport) -> Path:
@@ -461,6 +568,8 @@ class EvidenceStore:
         """Build a compact index record for a saved report."""
         artifact_paths = self.get_artifact_paths(path)
         return {
+            "kind": "report",
+            "id": path.name,
             "path": str(path),
             "filename": path.name,
             "collection": str(report.metadata.get("collection", "")).strip(),
@@ -472,6 +581,35 @@ class EvidenceStore:
             "citation_count": len(self._collect_citations(report)),
             "summary_preview": self._summary_preview(report.summary),
             "artifact_dir": str(artifact_paths["artifact_dir"]),
+        }
+
+    def _bundle_record(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Build a compact index record for a saved collection bundle."""
+        artifact_dir = Path(payload["artifact_dir"])
+        collection = payload.get("collection", "")
+        workflow_ids = payload.get("workflow_ids", [])
+        report_titles = payload.get("report_titles", [])
+        return {
+            "kind": "collection_bundle",
+            "id": artifact_dir.name,
+            "path": str(artifact_dir),
+            "filename": artifact_dir.name,
+            "collection": collection,
+            "workflow_id": "collection_bundle",
+            "title": f"Collection Brief: {collection}",
+            "question": "",
+            "generated_at": payload.get("generated_at", ""),
+            "evidence_count": payload.get("evidence_count", 0),
+            "citation_count": payload.get("citation_count", 0),
+            "summary_preview": self._summary_preview(
+                payload.get("collection_objective", "")
+                or ", ".join(report_titles[:2])
+            ),
+            "artifact_dir": str(artifact_dir),
+            "bundle_markdown_path": payload.get("bundle_markdown_path", ""),
+            "bundle_json_path": payload.get("bundle_json_path", ""),
+            "report_count": payload.get("report_count", 0),
+            "workflow_ids": workflow_ids,
         }
 
     def _collection_bundle_payload(
@@ -545,6 +683,26 @@ class EvidenceStore:
         if not slug:
             raise ValueError("Collection name must include letters or numbers")
         return slug
+
+    def resolve_bundle_artifact_dir(self, path: Path | str) -> Path:
+        """Resolve a collection bundle artifact directory from an id, dir, or file path."""
+        candidate = Path(path)
+        if candidate.exists():
+            if candidate.is_dir():
+                return candidate
+            if candidate.parent.is_dir():
+                return candidate.parent
+
+        direct_dir = self.reports_path / candidate.name
+        if direct_dir.is_dir():
+            return direct_dir
+
+        if not candidate.name.endswith("_artifacts"):
+            suffixed_dir = self.reports_path / f"{candidate.name}_artifacts"
+            if suffixed_dir.is_dir():
+                return suffixed_dir
+
+        raise FileNotFoundError(f"Could not find collection bundle artifact: {path}")
 
     def _parse_generated_at(self, value: str) -> datetime:
         """Parse a stored report timestamp."""

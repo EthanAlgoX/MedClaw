@@ -214,6 +214,45 @@ class TestCLI:
         assert payload[0]["workflow_id"] == "literature_review"
         assert payload[0]["filename"] == report_path.name
 
+    def test_research_artifacts_command_lists_collection_bundles(self, tmp_path, monkeypatch):
+        """Research artifacts command should include collection bundle records."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "artifacts", "--collection", "KRAS Program", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert len(payload) == 1
+        assert payload[0]["kind"] == "collection_bundle"
+        assert payload[0]["title"] == "Collection Brief: KRAS Program"
+
     def test_research_artifacts_command_supports_search(self, tmp_path, monkeypatch):
         """Research artifacts command should filter reports by search text."""
         test_home = tmp_path / "test_home"
@@ -507,6 +546,88 @@ class TestCLI:
         assert result.returncode == 0
         payload = json.loads(result.stdout)
         assert payload[0]["identifier"] == "PMID:1"
+
+    def test_research_show_command_can_display_bundle_markdown_by_default(self, tmp_path, monkeypatch):
+        """Research show command should auto-display bundle markdown when given a bundle id."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        bundle_paths = store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "show", bundle_paths["artifact_dir"].name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "Collection Brief: KRAS Program" in result.stdout
+
+    def test_research_show_command_can_return_bundle_json(self, tmp_path, monkeypatch):
+        """Research show command should expose bundle JSON artifacts."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        bundle_paths = store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "show",
+                bundle_paths["artifact_dir"].name,
+                "--artifact",
+                "bundle-json",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["kind"] == "collection_bundle"
+        assert payload["collection"] == "KRAS Program"
 
     def test_research_show_command_supports_summary_view(self, tmp_path, monkeypatch):
         """Research show command should render a compact summary view."""
