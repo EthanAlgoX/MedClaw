@@ -523,10 +523,30 @@ def research_dashboards(
         "--only-unhealthy",
         help="Only include collections with health signals.",
     ),
+    only_missing_bundle: bool = typer.Option(
+        False,
+        "--only-missing-bundle",
+        help="Only include collections without a saved bundle.",
+    ),
+    only_missing_run: bool = typer.Option(
+        False,
+        "--only-missing-run",
+        help="Only include collections without a saved run.",
+    ),
     missing_workflow: str | None = typer.Option(
         None,
         "--missing-workflow",
         help="Only include collections missing a preferred workflow.",
+    ),
+    owner: str | None = typer.Option(
+        None,
+        "--owner",
+        help="Only include collections owned by the given team or user.",
+    ),
+    disease_area: str | None = typer.Option(
+        None,
+        "--disease-area",
+        help="Only include collections for the given disease area.",
     ),
     sort_by: Literal["activity", "health", "coverage", "name"] = typer.Option(
         "activity",
@@ -569,7 +589,11 @@ def research_dashboards(
     filters = build_collection_dashboard_query_filters(
         only_stale=only_stale,
         only_unhealthy=only_unhealthy,
+        only_missing_bundle=only_missing_bundle,
+        only_missing_run=only_missing_run,
         missing_workflow=missing_workflow,
+        owner=owner,
+        disease_area=disease_area,
         sort_by=sort_by,
         group_by=normalized_group_by,
         top=top,
@@ -579,7 +603,11 @@ def research_dashboards(
     dashboards = store.list_collection_dashboard_models(
         only_stale=only_stale,
         only_unhealthy=only_unhealthy,
+        only_missing_bundle=only_missing_bundle,
+        only_missing_run=only_missing_run,
         missing_workflow=missing_workflow,
+        owner=owner,
+        disease_area=disease_area,
         sort_by=sort_by,
         group_by=normalized_group_by,
         limit=fetch_limit,

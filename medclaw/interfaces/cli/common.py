@@ -539,7 +539,8 @@ def emit_collection_dashboard_list(
     if summary is not None:
         summary_line = (
             f"total={summary.total} stale={summary.stale} unhealthy={summary.unhealthy} "
-            f"missing_preferred={summary.missing_preferred} with_bundle={summary.with_bundle} "
+            f"missing_preferred={summary.missing_preferred} missing_bundle={summary.missing_bundle} "
+            f"missing_run={summary.missing_run} with_bundle={summary.with_bundle} "
             f"with_run={summary.with_run}"
         )
         console.print(f"[bold]Collection Dashboards[/bold] (sort={sort_by}): {summary_line}")

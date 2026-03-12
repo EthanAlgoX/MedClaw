@@ -587,11 +587,17 @@ class EvidenceStore:
         *,
         only_stale: bool = False,
         only_unhealthy: bool = False,
+        only_missing_bundle: bool = False,
+        only_missing_run: bool = False,
         missing_workflow: str | None = None,
+        owner: str | None = None,
+        disease_area: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Filter collection aggregate records by health-oriented triage criteria."""
         normalized_missing_workflow = missing_workflow.strip().lower() if missing_workflow else ""
+        normalized_owner = owner.strip().lower() if owner else ""
+        normalized_disease_area = disease_area.strip().lower() if disease_area else ""
         records = self.list_collection_records(limit=1000)
         filtered = []
         for record in records:
@@ -599,9 +605,17 @@ class EvidenceStore:
                 continue
             if only_unhealthy and not record["health_signals"]:
                 continue
+            if only_missing_bundle and record["latest_bundle_markdown_path"]:
+                continue
+            if only_missing_run and record["latest_run_id"]:
+                continue
             if normalized_missing_workflow and normalized_missing_workflow not in {
                 workflow_id.lower() for workflow_id in record["missing_preferred_workflows"]
             }:
+                continue
+            if normalized_owner and record["owner"].strip().lower() != normalized_owner:
+                continue
+            if normalized_disease_area and record["disease_area"].strip().lower() != normalized_disease_area:
                 continue
             filtered.append(record)
             if len(filtered) >= limit:
@@ -617,7 +631,11 @@ class EvidenceStore:
         *,
         only_stale: bool = False,
         only_unhealthy: bool = False,
+        only_missing_bundle: bool = False,
+        only_missing_run: bool = False,
         missing_workflow: str | None = None,
+        owner: str | None = None,
+        disease_area: str | None = None,
         limit: int = 50,
     ) -> list[CollectionRecord]:
         """Filter collection aggregate records as typed models."""
@@ -625,7 +643,11 @@ class EvidenceStore:
             self.filter_collection_records(
                 only_stale=only_stale,
                 only_unhealthy=only_unhealthy,
+                only_missing_bundle=only_missing_bundle,
+                only_missing_run=only_missing_run,
                 missing_workflow=missing_workflow,
+                owner=owner,
+                disease_area=disease_area,
                 limit=limit,
             )
         )
@@ -753,7 +775,11 @@ class EvidenceStore:
         *,
         only_stale: bool = False,
         only_unhealthy: bool = False,
+        only_missing_bundle: bool = False,
+        only_missing_run: bool = False,
         missing_workflow: str | None = None,
+        owner: str | None = None,
+        disease_area: str | None = None,
         sort_by: str = "activity",
         group_by: str | None = None,
         limit: int = 50,
@@ -763,7 +789,11 @@ class EvidenceStore:
         records = self.filter_collection_record_models(
             only_stale=only_stale,
             only_unhealthy=only_unhealthy,
+            only_missing_bundle=only_missing_bundle,
+            only_missing_run=only_missing_run,
             missing_workflow=missing_workflow,
+            owner=owner,
+            disease_area=disease_area,
             limit=limit,
         )
         dashboards = [

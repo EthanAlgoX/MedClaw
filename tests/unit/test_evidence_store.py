@@ -616,16 +616,22 @@ class TestEvidenceStore:
         store.save_collection_manifest(
             name="Dormant Program",
             objective="Track stale activity",
+            owner="Translational Team",
+            disease_area="Oncology",
             preferred_workflows=["literature_review"],
         )
         store.save_collection_manifest(
             name="Gap Program",
             objective="Track preferred workflow coverage",
+            owner="Biomarker Team",
+            disease_area="Thoracic oncology",
             preferred_workflows=["evidence_brief"],
         )
         store.save_collection_manifest(
             name="Healthy Program",
             objective="Track active execution",
+            owner="Translational Team",
+            disease_area="Oncology",
             preferred_workflows=["literature_review"],
         )
 
@@ -678,6 +684,17 @@ class TestEvidenceStore:
             missing_workflow="evidence_brief",
             limit=10,
         )
+        missing_bundle_records = store.filter_collection_record_models(
+            only_missing_bundle=True,
+            owner="Translational Team",
+            disease_area="Oncology",
+            limit=10,
+        )
+        missing_run_records = store.filter_collection_record_models(
+            only_missing_run=True,
+            owner="Biomarker Team",
+            limit=10,
+        )
 
         assert [record.collection for record in stale_records] == ["Dormant Program"]
         assert {record.collection for record in unhealthy_records} == {
@@ -686,6 +703,11 @@ class TestEvidenceStore:
             "Healthy Program",
         }
         assert [record.collection for record in missing_workflow_records] == ["Gap Program"]
+        assert {record.collection for record in missing_bundle_records} == {
+            "Dormant Program",
+            "Healthy Program",
+        }
+        assert [record.collection for record in missing_run_records] == ["Gap Program"]
 
     def test_read_artifact_returns_structured_payloads(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)

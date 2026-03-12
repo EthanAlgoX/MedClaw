@@ -280,7 +280,11 @@ class CollectionDashboardQueryFilters(BaseModel):
 
     only_stale: bool = False
     only_unhealthy: bool = False
+    only_missing_bundle: bool = False
+    only_missing_run: bool = False
     missing_workflow: str | None = None
+    owner: str | None = None
+    disease_area: str | None = None
     sort_by: Literal["activity", "health", "coverage", "name"] = "activity"
     group_by: Literal["owner", "disease_area"] | None = None
     top: int | None = None
@@ -305,6 +309,8 @@ class CollectionDashboardAggregateSummary(BaseModel):
     stale: int = 0
     unhealthy: int = 0
     missing_preferred: int = 0
+    missing_bundle: int = 0
+    missing_run: int = 0
     with_bundle: int = 0
     with_run: int = 0
     grouped_by: Literal["owner", "disease_area"] | None = None

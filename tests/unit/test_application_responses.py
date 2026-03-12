@@ -169,6 +169,10 @@ class TestApplicationResponses:
         filters = build_collection_dashboard_query_filters(
             only_stale=True,
             only_unhealthy=True,
+            only_missing_bundle=True,
+            only_missing_run=True,
+            owner="Translational Team",
+            disease_area="Oncology",
             group_by="owner",
             sort_by="health",
             top=2,
@@ -180,6 +184,10 @@ class TestApplicationResponses:
         assert response.model_dump(mode="json")["items"][0]["collection"]["collection"] == "Dormant Program"
         assert response.model_dump(mode="json")["summary"]["stale"] == 1
         assert response.model_dump(mode="json")["filters"]["only_stale"] is True
+        assert response.model_dump(mode="json")["filters"]["only_missing_bundle"] is True
+        assert response.model_dump(mode="json")["filters"]["only_missing_run"] is True
+        assert response.model_dump(mode="json")["filters"]["owner"] == "Translational Team"
+        assert response.model_dump(mode="json")["filters"]["disease_area"] == "Oncology"
         assert response.model_dump(mode="json")["filters"]["group_by"] == "owner"
         assert response.model_dump(mode="json")["filters"]["sort_by"] == "health"
         assert response.model_dump(mode="json")["filters"]["top"] == 2

@@ -1002,6 +1002,117 @@ class TestCLI:
         assert export_payload["filters"]["group_by"] == "owner"
         assert export_payload["filters"]["top"] == 1
 
+    def test_research_dashboards_command_supports_owner_and_missing_asset_filters(self, tmp_path, monkeypatch):
+        """Research dashboards should filter by owner, disease area, and missing assets."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="Gap Program",
+            objective="Track workflow coverage",
+            owner="Biomarker Team",
+            disease_area="Thoracic oncology",
+            preferred_workflows=["evidence_brief"],
+        )
+        store.save_collection_manifest(
+            name="Stable Program",
+            objective="Track stable active work",
+            owner="Biomarker Team",
+            disease_area="Thoracic oncology",
+            preferred_workflows=["literature_review"],
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Gap Review",
+            question="Gap topic",
+            summary="Summary",
+            generated_at="2026-03-08T09:00:00+00:00",
+            collection="Gap Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Stable Review",
+            question="Stable topic",
+            summary="Summary",
+            generated_at="2026-03-09T09:00:00+00:00",
+            collection="Stable Program",
+        )
+        self._seed_run(
+            test_home,
+            run_id="run-stable",
+            query="Stable topic",
+            collection="Stable Program",
+            workflow_ids=["literature_review"],
+            completed_at="2026-03-09T09:00:00+00:00",
+        )
+        stable_bundle_store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        stable_bundle_store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="literature_review",
+                    question="Stable topic",
+                    title="Stable Review",
+                    summary="Summary",
+                    metadata={"collection": "Stable Program"},
+                )
+            ],
+            markdown_summary="# Collection Brief: Stable Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "dashboards",
+                "--owner",
+                "Biomarker Team",
+                "--disease-area",
+                "Thoracic oncology",
+                "--only-missing-bundle",
+                "--only-missing-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        text_result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "dashboards",
+                "--owner",
+                "Biomarker Team",
+                "--disease-area",
+                "Thoracic oncology",
+                "--only-missing-bundle",
+                "--only-missing-run",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["total"] == 1
+        assert payload["items"][0]["collection"]["collection"] == "Gap Program"
+        assert payload["filters"]["owner"] == "Biomarker Team"
+        assert payload["filters"]["disease_area"] == "Thoracic oncology"
+        assert payload["filters"]["only_missing_bundle"] is True
+        assert payload["filters"]["only_missing_run"] is True
+        assert payload["summary"]["missing_bundle"] == 1
+        assert payload["summary"]["missing_run"] == 1
+
+        assert text_result.returncode == 0
+        assert "missing_bundle=1" in text_result.stdout
+        assert "missing_run=1" in text_result.stdout
+        assert "Gap Program" in text_result.stdout
+        assert "Stable Program" not in text_result.stdout
+
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
         """Research runs command should expose typed saved run records."""
         test_home = tmp_path / "test_home"

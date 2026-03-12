@@ -300,7 +300,11 @@ def build_collection_dashboard_query_filters(
     *,
     only_stale: bool = False,
     only_unhealthy: bool = False,
+    only_missing_bundle: bool = False,
+    only_missing_run: bool = False,
     missing_workflow: str | None = None,
+    owner: str | None = None,
+    disease_area: str | None = None,
     sort_by: str = "activity",
     group_by: str | None = None,
     top: int | None = None,
@@ -311,7 +315,11 @@ def build_collection_dashboard_query_filters(
     return CollectionDashboardQueryFilters(
         only_stale=only_stale,
         only_unhealthy=only_unhealthy,
+        only_missing_bundle=only_missing_bundle,
+        only_missing_run=only_missing_run,
         missing_workflow=missing_workflow,
+        owner=owner,
+        disease_area=disease_area,
         sort_by=sort_by,
         group_by=group_by,
         top=top,
@@ -343,6 +351,8 @@ def build_collection_dashboard_aggregate_summary(
     stale = 0
     unhealthy = 0
     missing_preferred = 0
+    missing_bundle = 0
+    missing_run = 0
     with_bundle = 0
     with_run = 0
 
@@ -355,8 +365,12 @@ def build_collection_dashboard_aggregate_summary(
             missing_preferred += 1
         if dashboard.latest_bundle is not None:
             with_bundle += 1
+        else:
+            missing_bundle += 1
         if dashboard.latest_run is not None:
             with_run += 1
+        else:
+            missing_run += 1
 
         if group_by:
             if group_by == "owner":
@@ -385,6 +399,8 @@ def build_collection_dashboard_aggregate_summary(
         stale=stale,
         unhealthy=unhealthy,
         missing_preferred=missing_preferred,
+        missing_bundle=missing_bundle,
+        missing_run=missing_run,
         with_bundle=with_bundle,
         with_run=with_run,
         grouped_by=group_by,
