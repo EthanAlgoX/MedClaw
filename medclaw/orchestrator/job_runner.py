@@ -1,4 +1,4 @@
-"""Workflow execution for MedClaw research jobs."""
+"""Compatibility facade over the decomposed research orchestration services."""
 
 from __future__ import annotations
 
@@ -6,31 +6,30 @@ from pathlib import Path
 
 from medclaw.evidence.models import ResearchReport
 from medclaw.evidence.store import EvidenceStore
+from medclaw.orchestrator.collection_service import CollectionService
+from medclaw.orchestrator.report_persistence import ReportPersistenceService
+from medclaw.orchestrator.run_coordinator import RunCoordinator
+from medclaw.orchestrator.workflow_registry import WorkflowRegistry
 from medclaw.policy.medical_safety import MedicalSafetyPolicy
 from medclaw.providers.base import LLMProvider
-from medclaw.reporting.briefs import render_collection_report_bundle, render_research_report
-from medclaw.workflows import (
-    ClinicalTrialLandscapeWorkflow,
-    DrugTargetLandscapeWorkflow,
-    EvidenceBriefWorkflow,
-    LiteratureReviewWorkflow,
-    StudyDesignWorkflow,
-)
 
 
 class ResearchOrchestrator:
-    """Run typed research workflows and persist their outputs."""
+    """Compatibility facade exposing the previous orchestrator API."""
 
     def __init__(self, workspace: Path):
         self.evidence_store = EvidenceStore(workspace)
         self.policy = MedicalSafetyPolicy()
-        self.workflows = {
-            "literature_review": LiteratureReviewWorkflow(),
-            "clinical_trial_landscape": ClinicalTrialLandscapeWorkflow(),
-            "drug_target_landscape": DrugTargetLandscapeWorkflow(),
-            "study_design": StudyDesignWorkflow(),
-            "evidence_brief": EvidenceBriefWorkflow(),
-        }
+        self.workflow_registry = WorkflowRegistry()
+        self.collection_service = CollectionService(self.evidence_store, self.workflow_registry)
+        self.report_persistence = ReportPersistenceService(self.evidence_store)
+        self.run_coordinator = RunCoordinator(
+            self.workflow_registry,
+            self.collection_service,
+            self.report_persistence,
+            policy=self.policy,
+        )
+        self.workflows = self.workflow_registry.workflows
 
     async def run(
         self,
@@ -38,58 +37,31 @@ class ResearchOrchestrator:
         query: str,
         provider: LLMProvider | None,
         collection: str | None = None,
-    ) -> ResearchReport:
-        """Run a workflow, attach policy, and persist the report."""
-        workflow = self.workflows[workflow_id]
-        collection_context = self._resolve_collection_context(collection)
-        report = await workflow.run(query, provider, collection_context=collection_context)
-        report = self.policy.apply(report)
-        artifact_paths = self.evidence_store.save_report_artifacts(report)
-        report.metadata["saved_path"] = str(artifact_paths["report"])
-        report.metadata["artifact_dir"] = str(artifact_paths["artifact_dir"])
-        report.metadata["artifact_paths"] = {
-            name: str(path) for name, path in artifact_paths.items()
-        }
-        report.metadata["llm_enabled"] = provider is not None
-        return report
+    ):
+        """Run a workflow through the decomposed coordinator stack."""
+        return await self.run_coordinator.run(
+            workflow_id,
+            query,
+            provider,
+            collection=collection,
+        )
 
     def render(self, report: ResearchReport) -> str:
         """Render a workflow report into markdown."""
-        return render_research_report(report)
+        return self.run_coordinator.render(report)
 
     def list_workflows(self) -> list[dict[str, str]]:
         """List available workflow ids and titles."""
-        return [
-            {
-                "id": workflow_id,
-                "title": workflow.title,
-            }
-            for workflow_id, workflow in self.workflows.items()
-        ]
+        return self.workflow_registry.list_workflows()
 
     def resolve_collection_workflows(self, collection: str | None) -> list[str]:
         """Resolve preferred workflows for a collection, keeping only valid ids."""
-        collection_context = self._resolve_collection_context(collection)
-        if not collection_context:
-            return []
-
-        preferred = collection_context.get("preferred_workflows", [])
-        if not isinstance(preferred, list):
-            return []
-        return [workflow_id for workflow_id in preferred if workflow_id in self.workflows]
+        return self.collection_service.resolve_workflows(collection)
 
     def save_collection_bundle(self, reports: list[ResearchReport]) -> dict[str, Path]:
         """Persist a collection-level synthesis bundle across multiple workflow reports."""
-        markdown_summary = render_collection_report_bundle(reports)
-        return self.evidence_store.save_collection_bundle_artifacts(reports, markdown_summary)
+        return self.report_persistence.save_collection_bundle(reports)
 
     def _resolve_collection_context(self, collection: str | None) -> dict[str, object] | None:
         """Load saved collection context when available and preserve ad-hoc collection names."""
-        if not collection or not collection.strip():
-            return None
-
-        normalized = collection.strip()
-        try:
-            return self.evidence_store.load_collection_manifest(normalized)
-        except FileNotFoundError:
-            return {"name": normalized}
+        return self.collection_service.resolve_context(collection)
