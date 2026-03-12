@@ -68,7 +68,9 @@ MedClaw follows a skill-first architecture:
 3. **Medical Domain**: Standardized data access (PubMed, ClinicalTrials, etc.)
 4. **Channels**: Multi-platform message delivery
 
-For a proposed MedClaw redesign focused on medical research workflows, see [docs/medclaw-redesign.md](docs/medclaw-redesign.md).
+For the earlier workflow-focused redesign, see [docs/medclaw-redesign.md](docs/medclaw-redesign.md).
+
+For a current architecture review and concrete optimization plan based on the present codebase, see [docs/medclaw-architecture-optimization.md](docs/medclaw-architecture-optimization.md).
 
 ## License
 
