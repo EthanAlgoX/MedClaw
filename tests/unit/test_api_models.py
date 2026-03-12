@@ -256,6 +256,7 @@ class TestArtifactApiModels:
     def test_collection_dashboard_list_response_models_dump_envelopes(self):
         filters = CollectionDashboardQueryFilters(
             only_unhealthy=True,
+            stale_days_min=30,
             only_missing_bundle=True,
             only_missing_run=True,
             owner="Biomarker Team",
@@ -307,6 +308,7 @@ class TestArtifactApiModels:
         assert response.model_dump(mode="json")["items"][0]["collection"]["slug"] == "dormant-program"
         assert response.model_dump(mode="json")["summary"]["grouped_by"] == "owner"
         assert response.model_dump(mode="json")["filters"]["only_unhealthy"] is True
+        assert response.model_dump(mode="json")["filters"]["stale_days_min"] == 30
         assert response.model_dump(mode="json")["filters"]["only_missing_bundle"] is True
         assert response.model_dump(mode="json")["filters"]["only_missing_run"] is True
         assert response.model_dump(mode="json")["filters"]["owner"] == "Biomarker Team"

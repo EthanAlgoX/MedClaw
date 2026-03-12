@@ -299,6 +299,7 @@ def build_collection_dashboard_response(dashboard: CollectionDashboard) -> Colle
 def build_collection_dashboard_query_filters(
     *,
     only_stale: bool = False,
+    stale_days_min: int | None = None,
     only_unhealthy: bool = False,
     only_missing_bundle: bool = False,
     only_missing_run: bool = False,
@@ -314,6 +315,7 @@ def build_collection_dashboard_query_filters(
     """Build typed collection dashboard filter metadata."""
     return CollectionDashboardQueryFilters(
         only_stale=only_stale,
+        stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,
         only_missing_bundle=only_missing_bundle,
         only_missing_run=only_missing_run,

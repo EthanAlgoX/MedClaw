@@ -279,6 +279,7 @@ class CollectionDashboardQueryFilters(BaseModel):
     """Query filters applied to collection dashboard listing endpoints."""
 
     only_stale: bool = False
+    stale_days_min: int | None = None
     only_unhealthy: bool = False
     only_missing_bundle: bool = False
     only_missing_run: bool = False

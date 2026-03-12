@@ -168,6 +168,7 @@ class TestApplicationResponses:
 
         filters = build_collection_dashboard_query_filters(
             only_stale=True,
+            stale_days_min=30,
             only_unhealthy=True,
             only_missing_bundle=True,
             only_missing_run=True,
@@ -184,6 +185,7 @@ class TestApplicationResponses:
         assert response.model_dump(mode="json")["items"][0]["collection"]["collection"] == "Dormant Program"
         assert response.model_dump(mode="json")["summary"]["stale"] == 1
         assert response.model_dump(mode="json")["filters"]["only_stale"] is True
+        assert response.model_dump(mode="json")["filters"]["stale_days_min"] == 30
         assert response.model_dump(mode="json")["filters"]["only_missing_bundle"] is True
         assert response.model_dump(mode="json")["filters"]["only_missing_run"] is True
         assert response.model_dump(mode="json")["filters"]["owner"] == "Translational Team"

@@ -1113,6 +1113,69 @@ class TestCLI:
         assert "Gap Program" in text_result.stdout
         assert "Stable Program" not in text_result.stdout
 
+    def test_research_dashboards_and_collections_support_stale_day_thresholds(self, tmp_path, monkeypatch):
+        """Dashboard and collection listings should support stale-day threshold filtering."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Track stale activity",
+            owner="Translational Team",
+            disease_area="Oncology",
+            preferred_workflows=["literature_review"],
+        )
+        store.save_collection_manifest(
+            name="Recent Program",
+            objective="Track recent activity",
+            owner="Translational Team",
+            disease_area="Oncology",
+            preferred_workflows=["literature_review"],
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Legacy Review",
+            question="Legacy topic",
+            summary="Summary",
+            generated_at="2025-01-01T09:00:00+00:00",
+            collection="Dormant Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Recent Review",
+            question="Recent topic",
+            summary="Summary",
+            generated_at="2026-03-08T09:00:00+00:00",
+            collection="Recent Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        dashboards_result = subprocess.run(
+            ["medclaw", "research", "dashboards", "--stale-days-min", "30", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        collections_result = subprocess.run(
+            ["medclaw", "research", "collections", "--stale-days-min", "30", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert dashboards_result.returncode == 0
+        dashboards_payload = json.loads(dashboards_result.stdout)
+        assert dashboards_payload["total"] == 1
+        assert dashboards_payload["items"][0]["collection"]["collection"] == "Dormant Program"
+        assert dashboards_payload["filters"]["stale_days_min"] == 30
+
+        assert collections_result.returncode == 0
+        collections_payload = json.loads(collections_result.stdout)
+        assert collections_payload["total"] == 1
+        assert collections_payload["items"][0]["collection"] == "Dormant Program"
+
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
         """Research runs command should expose typed saved run records."""
         test_home = tmp_path / "test_home"

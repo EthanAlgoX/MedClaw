@@ -695,6 +695,16 @@ class TestEvidenceStore:
             owner="Biomarker Team",
             limit=10,
         )
+        stale_days_records = store.filter_collection_record_models(
+            stale_days_min=30,
+            limit=10,
+        )
+        stale_dashboard_records = store.list_collection_dashboard_models(
+            stale_days_min=30,
+            sort_by="health",
+            limit=10,
+            timeline_limit=1,
+        )
 
         assert [record.collection for record in stale_records] == ["Dormant Program"]
         assert {record.collection for record in unhealthy_records} == {
@@ -708,6 +718,8 @@ class TestEvidenceStore:
             "Healthy Program",
         }
         assert [record.collection for record in missing_run_records] == ["Gap Program"]
+        assert [record.collection for record in stale_days_records] == ["Dormant Program"]
+        assert [dashboard.collection.collection for dashboard in stale_dashboard_records] == ["Dormant Program"]
 
     def test_read_artifact_returns_structured_payloads(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)

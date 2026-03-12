@@ -366,6 +366,12 @@ def research_collections(
         "--only-stale",
         help="Only include collections with stale activity.",
     ),
+    stale_days_min: int | None = typer.Option(
+        None,
+        "--stale-days-min",
+        min=1,
+        help="Only include collections with at least this many stale days.",
+    ),
     only_unhealthy: bool = typer.Option(
         False,
         "--only-unhealthy",
@@ -383,6 +389,7 @@ def research_collections(
     store = get_evidence_store()
     records = store.filter_collection_record_models(
         only_stale=only_stale,
+        stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
         limit=limit,
@@ -398,6 +405,8 @@ def research_collections(
     filter_suffix = []
     if only_stale:
         filter_suffix.append("only_stale")
+    if stale_days_min is not None:
+        filter_suffix.append(f"stale_days_min={stale_days_min}")
     if only_unhealthy:
         filter_suffix.append("only_unhealthy")
     if missing_workflow:
@@ -518,6 +527,12 @@ def research_dashboards(
         "--only-stale",
         help="Only include collections with stale activity.",
     ),
+    stale_days_min: int | None = typer.Option(
+        None,
+        "--stale-days-min",
+        min=1,
+        help="Only include collections with at least this many stale days.",
+    ),
     only_unhealthy: bool = typer.Option(
         False,
         "--only-unhealthy",
@@ -588,6 +603,7 @@ def research_dashboards(
     fetch_limit = max(limit, top or 0)
     filters = build_collection_dashboard_query_filters(
         only_stale=only_stale,
+        stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,
         only_missing_bundle=only_missing_bundle,
         only_missing_run=only_missing_run,
@@ -602,6 +618,7 @@ def research_dashboards(
     )
     dashboards = store.list_collection_dashboard_models(
         only_stale=only_stale,
+        stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,
         only_missing_bundle=only_missing_bundle,
         only_missing_run=only_missing_run,

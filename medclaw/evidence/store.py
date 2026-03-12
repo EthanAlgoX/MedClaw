@@ -586,6 +586,7 @@ class EvidenceStore:
         self,
         *,
         only_stale: bool = False,
+        stale_days_min: int | None = None,
         only_unhealthy: bool = False,
         only_missing_bundle: bool = False,
         only_missing_run: bool = False,
@@ -603,6 +604,10 @@ class EvidenceStore:
         for record in records:
             if only_stale and not record["stale"]:
                 continue
+            if stale_days_min is not None:
+                record_stale_days = record["stale_days"]
+                if record_stale_days is None or record_stale_days < stale_days_min:
+                    continue
             if only_unhealthy and not record["health_signals"]:
                 continue
             if only_missing_bundle and record["latest_bundle_markdown_path"]:
@@ -630,6 +635,7 @@ class EvidenceStore:
         self,
         *,
         only_stale: bool = False,
+        stale_days_min: int | None = None,
         only_unhealthy: bool = False,
         only_missing_bundle: bool = False,
         only_missing_run: bool = False,
@@ -642,6 +648,7 @@ class EvidenceStore:
         return collection_records_from_dicts(
             self.filter_collection_records(
                 only_stale=only_stale,
+                stale_days_min=stale_days_min,
                 only_unhealthy=only_unhealthy,
                 only_missing_bundle=only_missing_bundle,
                 only_missing_run=only_missing_run,
@@ -774,6 +781,7 @@ class EvidenceStore:
         self,
         *,
         only_stale: bool = False,
+        stale_days_min: int | None = None,
         only_unhealthy: bool = False,
         only_missing_bundle: bool = False,
         only_missing_run: bool = False,
@@ -788,6 +796,7 @@ class EvidenceStore:
         """List collection dashboards under triage-oriented filters."""
         records = self.filter_collection_record_models(
             only_stale=only_stale,
+            stale_days_min=stale_days_min,
             only_unhealthy=only_unhealthy,
             only_missing_bundle=only_missing_bundle,
             only_missing_run=only_missing_run,
