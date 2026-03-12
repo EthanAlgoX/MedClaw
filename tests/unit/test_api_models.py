@@ -6,11 +6,15 @@ from medclaw.evidence.api_models import (
     ArtifactQueryFilters,
     CollectionListResponse,
     CollectionResponse,
+    ResearchRunListResponse,
+    ResearchRunQueryFilters,
+    ResearchRunResponse,
     ResearchReportListResponse,
     ResearchReportResponse,
     artifact_record_from_dict,
+    research_run_record_from_dict,
 )
-from medclaw.evidence.models import ResearchReport
+from medclaw.evidence.models import ResearchReport, ResearchRun, WorkflowRun
 
 
 class TestArtifactApiModels:
@@ -135,3 +139,41 @@ class TestArtifactApiModels:
         assert report_list_response.model_dump(mode="json")["total"] == 1
         assert collection_response.model_dump(mode="json")["item"]["slug"] == "egfr-program"
         assert collection_list_response.model_dump(mode="json")["items"][0]["collection"] == "EGFR Program"
+
+    def test_research_run_response_models_dump_envelopes(self):
+        record = research_run_record_from_dict(
+            {
+                "id": "run-123",
+                "path": "/tmp/run-123.json",
+                "filename": "20260308_run-123.json",
+                "scope": "collection",
+                "query": "KRAS inhibitors",
+                "collection": "KRAS Program",
+                "status": "completed",
+                "started_at": "2026-03-08T09:00:00+00:00",
+                "completed_at": "2026-03-08T09:10:00+00:00",
+                "workflow_count": 2,
+                "workflow_ids": ["study_design", "evidence_brief"],
+                "bundle_saved_path": "/tmp/bundle_summary.md",
+            }
+        )
+        run = ResearchRun(
+            id="run-123",
+            query="KRAS inhibitors",
+            collection="KRAS Program",
+            workflow_runs=[
+                WorkflowRun(workflow_id="study_design", question="KRAS inhibitors"),
+                WorkflowRun(workflow_id="evidence_brief", question="KRAS inhibitors"),
+            ],
+        )
+        filters = ResearchRunQueryFilters(collection="KRAS Program", latest=True, limit=1)
+        list_response = ResearchRunListResponse(items=[record], total=1, filters=filters)
+        payload_response = ResearchRunResponse(
+            target="run-123",
+            path="/tmp/run-123.json",
+            record=record,
+            run=run,
+        )
+
+        assert list_response.model_dump(mode="json")["items"][0]["scope"] == "collection"
+        assert payload_response.model_dump(mode="json")["run"]["workflow_runs"][0]["workflow_id"] == "study_design"

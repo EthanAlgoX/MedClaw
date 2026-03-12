@@ -17,11 +17,14 @@ from medclaw.evidence.api_models import (
     ArtifactRecord,
     CollectionManifest,
     CollectionRecord,
+    ResearchRunRecord,
     artifact_record_from_dict,
     artifact_records_from_dicts,
     collection_manifest_from_dict,
     collection_record_from_dict,
     collection_records_from_dicts,
+    research_run_record_from_dict,
+    research_run_records_from_dicts,
 )
 from medclaw.evidence.models import Citation, ResearchReport, ResearchRun
 
@@ -166,6 +169,78 @@ class EvidenceStore:
     def list_runs(self) -> list[Path]:
         """List saved research runs, newest first."""
         return sorted(self.runs_path.glob("*.json"), reverse=True)
+
+    def list_run_records(
+        self,
+        query: str | None = None,
+        collection: str | None = None,
+        workflow_id: str | None = None,
+        latest: bool = False,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List saved research run records, newest first."""
+        lowered = query.lower().strip() if query else ""
+        normalized_collection = collection.strip().lower() if collection else ""
+        normalized_workflow = workflow_id.strip().lower() if workflow_id else ""
+
+        records = []
+        for path in self.list_runs():
+            try:
+                run = self.load_run(path)
+            except Exception:
+                continue
+            record = self._run_record(path, run)
+            if normalized_collection and record["collection"].lower() != normalized_collection:
+                continue
+            if normalized_workflow and normalized_workflow not in {
+                workflow.lower() for workflow in record["workflow_ids"]
+            }:
+                continue
+            if lowered:
+                haystack = " ".join(
+                    [
+                        record["filename"],
+                        record["query"],
+                        record["collection"],
+                        " ".join(record["workflow_ids"]),
+                    ]
+                ).lower()
+                if lowered not in haystack:
+                    continue
+            records.append(record)
+            if latest:
+                return records[:1]
+            if len(records) >= limit:
+                break
+        return records
+
+    def get_run_record(self, path: Path | str) -> dict[str, Any]:
+        """Resolve a saved research run into its compact index record."""
+        run_path = self.resolve_run_path(path)
+        return self._run_record(run_path, self.load_run(run_path))
+
+    def get_run_record_model(self, path: Path | str) -> ResearchRunRecord:
+        """Resolve a saved research run into a typed compact index record."""
+        return research_run_record_from_dict(self.get_run_record(path))
+
+    def list_run_record_models(
+        self,
+        query: str | None = None,
+        collection: str | None = None,
+        workflow_id: str | None = None,
+        latest: bool = False,
+        limit: int = 50,
+    ) -> list[ResearchRunRecord]:
+        """List saved research run records as typed models."""
+        return research_run_records_from_dicts(
+            self.list_run_records(
+                query=query,
+                collection=collection,
+                workflow_id=workflow_id,
+                latest=latest,
+                limit=limit,
+            )
+        )
 
     def list_report_records(self, limit: int = 50) -> list[dict[str, Any]]:
         """List report metadata records, newest first."""
@@ -627,6 +702,9 @@ class EvidenceStore:
             suffixed_path = self.runs_path / f"{candidate.name}.json"
             if suffixed_path.exists() and suffixed_path.is_file():
                 return suffixed_path
+            matched_paths = sorted(self.runs_path.glob(f"*_{candidate.name}.json"), reverse=True)
+            if matched_paths:
+                return matched_paths[0]
         raise FileNotFoundError(f"Could not find research run: {path}")
 
     def get_artifact_paths(self, path: Path | str) -> dict[str, Path]:
@@ -806,6 +884,25 @@ class EvidenceStore:
             "bundle_json_path": payload.get("bundle_json_path", ""),
             "report_count": payload.get("report_count", 0),
             "workflow_ids": workflow_ids,
+        }
+
+    def _run_record(self, path: Path, run: ResearchRun) -> dict[str, Any]:
+        """Build a compact index record for a saved research run."""
+        workflow_ids = [workflow_run.workflow_id for workflow_run in run.workflow_runs]
+        scope = "collection" if len(workflow_ids) > 1 else "workflow"
+        return {
+            "id": run.id,
+            "path": str(path),
+            "filename": path.name,
+            "scope": scope,
+            "query": run.query,
+            "collection": run.collection,
+            "status": run.status,
+            "started_at": run.started_at,
+            "completed_at": run.completed_at,
+            "workflow_count": len(workflow_ids),
+            "workflow_ids": workflow_ids,
+            "bundle_saved_path": str(run.metadata.get("bundle_saved_path", "")).strip(),
         }
 
     def _collection_bundle_payload(

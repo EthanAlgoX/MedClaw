@@ -39,7 +39,8 @@ from medclaw.evidence.artifacts import (
     build_unsupported_artifact_error,
     normalize_artifact_name,
 )
-from medclaw.evidence.models import ResearchReport
+from medclaw.evidence.api_models import ResearchRunRecord
+from medclaw.evidence.models import ResearchReport, ResearchRun
 from medclaw.evidence.store import EvidenceStore
 from medclaw.providers.deepseek import DeepSeekProvider
 from medclaw.providers.openrouter import OpenRouterProvider
@@ -447,3 +448,50 @@ def emit_collection_manifest(record: CollectionRecord) -> None:
         console.print(f"active workflows: {', '.join(record.workflows)}")
     if record.latest_bundle_markdown_path:
         console.print(f"latest bundle: {record.latest_bundle_markdown_path}")
+
+
+def emit_research_run(run: ResearchRun) -> None:
+    """Render a saved research run in a compact operator-friendly format."""
+    started = run.started_at.split("T", 1)[0] if run.started_at else "n/a"
+    completed = run.completed_at.split("T", 1)[0] if run.completed_at else "n/a"
+    scope = "collection" if len(run.workflow_runs) > 1 else "workflow"
+    console.print(f"[bold]Research Run {run.id}[/bold]")
+    console.print(f"scope: {scope}")
+    if run.collection:
+        console.print(f"collection: {run.collection}")
+    console.print(f"status: {run.status}")
+    console.print(f"started: {started}")
+    console.print(f"completed: {completed}")
+    console.print(f"query: {run.query}")
+    console.print(f"workflows: {', '.join(workflow_run.workflow_id for workflow_run in run.workflow_runs)}")
+    if run.metadata.get("bundle_saved_path"):
+        console.print(f"bundle: {run.metadata['bundle_saved_path']}")
+    for workflow_run in run.workflow_runs:
+        console.print(
+            "  - "
+            f"{workflow_run.workflow_id} "
+            f"provider={workflow_run.provider_name or 'none'} "
+            f"model={workflow_run.model_name or 'none'}"
+        )
+        if workflow_run.report_path:
+            console.print(f"      report: {workflow_run.report_path}")
+
+
+def emit_research_run_record_list(records: list[ResearchRunRecord]) -> None:
+    """Render a compact list of research run records."""
+    if not records:
+        console.print("[yellow]No research runs matched the current filters.[/yellow]")
+        return
+
+    console.print("[bold]Research Runs:[/bold]")
+    for record in records:
+        completed = record.completed_at.split("T", 1)[0] if record.completed_at else "n/a"
+        console.print(
+            "  - "
+            f"{record.id} [{record.scope}] {completed} workflows={','.join(record.workflow_ids)}"
+        )
+        if record.collection:
+            console.print(f"      collection: {record.collection}")
+        console.print(f"      query: {record.query}")
+        if record.bundle_saved_path:
+            console.print(f"      bundle: {record.bundle_saved_path}")

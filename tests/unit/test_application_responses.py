@@ -10,6 +10,9 @@ from medclaw.application.responses import (
     build_config_response,
     build_provider_response,
     build_provider_summary,
+    build_research_run_list_response,
+    build_research_run_query_filters,
+    build_research_run_response,
     build_research_report_list_response,
     build_research_report_response,
     build_skill_list_response,
@@ -22,8 +25,9 @@ from medclaw.evidence.api_models import (
     artifact_record_from_dict,
     collection_manifest_from_dict,
     collection_record_from_dict,
+    research_run_record_from_dict,
 )
-from medclaw.evidence.models import ResearchReport
+from medclaw.evidence.models import ResearchReport, ResearchRun, WorkflowRun
 
 
 class TestApplicationResponses:
@@ -42,6 +46,41 @@ class TestApplicationResponses:
 
         assert single.model_dump(mode="json")["report"]["workflow_id"] == "literature_review"
         assert many.model_dump(mode="json")["total"] == 1
+
+    def test_build_research_run_responses(self):
+        record = research_run_record_from_dict(
+            {
+                "id": "run-123",
+                "path": "/tmp/run-123.json",
+                "filename": "20260308_run-123.json",
+                "scope": "workflow",
+                "query": "KRAS inhibitors",
+                "collection": "",
+                "status": "completed",
+                "started_at": "2026-03-08T09:00:00+00:00",
+                "completed_at": "2026-03-08T09:01:00+00:00",
+                "workflow_count": 1,
+                "workflow_ids": ["literature_review"],
+                "bundle_saved_path": "",
+            }
+        )
+        run = ResearchRun(
+            id="run-123",
+            query="KRAS inhibitors",
+            workflow_runs=[WorkflowRun(workflow_id="literature_review", question="KRAS inhibitors")],
+        )
+
+        filters = build_research_run_query_filters(workflow_id="literature_review", latest=True, limit=1)
+        list_response = build_research_run_list_response([record], filters)
+        response = build_research_run_response(
+            target="run-123",
+            path="/tmp/run-123.json",
+            record=record,
+            run=run,
+        )
+
+        assert list_response.model_dump(mode="json")["items"][0]["workflow_ids"] == ["literature_review"]
+        assert response.model_dump(mode="json")["record"]["id"] == "run-123"
 
     def test_build_artifact_responses(self):
         filters = build_artifact_query_filters(kind="report", latest=True, limit=1)

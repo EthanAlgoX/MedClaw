@@ -77,6 +77,50 @@ class TestEvidenceStore:
         assert loaded.workflow_runs[0].workflow_id == "literature_review"
         assert loaded.workflow_runs[0].model_name == "fake-model"
 
+    def test_list_run_records_supports_latest_and_filters(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        workflow_run = store.save_run(
+            ResearchRun(
+                id="workflow-run",
+                query="KRAS inhibitors",
+                collection="KRAS Program",
+                started_at="2026-03-08T09:00:00+00:00",
+                completed_at="2026-03-08T09:01:00+00:00",
+                workflow_runs=[
+                    WorkflowRun(
+                        workflow_id="literature_review",
+                        question="KRAS inhibitors",
+                    )
+                ],
+            )
+        )
+        store.save_run(
+            ResearchRun(
+                id="collection-run",
+                query="EGFR biomarkers",
+                collection="EGFR Program",
+                started_at="2026-03-09T09:00:00+00:00",
+                completed_at="2026-03-09T09:05:00+00:00",
+                workflow_runs=[
+                    WorkflowRun(workflow_id="study_design", question="EGFR biomarkers"),
+                    WorkflowRun(workflow_id="evidence_brief", question="EGFR biomarkers"),
+                ],
+                metadata={"bundle_saved_path": "/tmp/bundle_summary.md"},
+            )
+        )
+
+        latest_records = store.list_run_records(latest=True)
+        workflow_records = store.list_run_records(workflow_id="literature_review")
+        collection_records = store.list_run_records(collection="EGFR Program")
+        resolved = store.get_run_record_model("workflow-run")
+
+        assert latest_records[0]["id"] == "collection-run"
+        assert latest_records[0]["scope"] == "collection"
+        assert workflow_records[0]["id"] == "workflow-run"
+        assert collection_records[0]["workflow_count"] == 2
+        assert resolved.id == "workflow-run"
+        assert resolved.path == str(workflow_run)
+
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
         report = ResearchReport(

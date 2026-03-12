@@ -25,10 +25,14 @@ from medclaw.evidence.api_models import (
     CollectionManifest,
     CollectionRecord,
     CollectionResponse,
+    ResearchRunListResponse,
+    ResearchRunQueryFilters,
+    ResearchRunRecord,
+    ResearchRunResponse,
     ResearchReportListResponse,
     ResearchReportResponse,
 )
-from medclaw.evidence.models import ResearchReport
+from medclaw.evidence.models import ResearchReport, ResearchRun
 
 
 def build_provider_summary(
@@ -128,6 +132,43 @@ def build_research_report_response(report: ResearchReport) -> ResearchReportResp
 def build_research_report_list_response(reports: list[ResearchReport]) -> ResearchReportListResponse:
     """Build a typed multi-report response."""
     return ResearchReportListResponse(items=reports, total=len(reports))
+
+
+def build_research_run_query_filters(
+    *,
+    query: str | None = None,
+    collection: str | None = None,
+    workflow_id: str | None = None,
+    latest: bool = False,
+    limit: int = 50,
+) -> ResearchRunQueryFilters:
+    """Build typed research run filter metadata."""
+    return ResearchRunQueryFilters(
+        query=query,
+        collection=collection,
+        workflow_id=workflow_id,
+        latest=latest,
+        limit=limit,
+    )
+
+
+def build_research_run_list_response(
+    records: list[ResearchRunRecord],
+    filters: ResearchRunQueryFilters,
+) -> ResearchRunListResponse:
+    """Build a typed research run list response."""
+    return ResearchRunListResponse(items=records, total=len(records), filters=filters)
+
+
+def build_research_run_response(
+    *,
+    target: str,
+    path: str,
+    record: ResearchRunRecord,
+    run: ResearchRun,
+) -> ResearchRunResponse:
+    """Build a typed research run payload response."""
+    return ResearchRunResponse(target=target, path=path, record=record, run=run)
 
 
 def build_artifact_query_filters(

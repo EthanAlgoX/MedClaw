@@ -14,6 +14,9 @@ from medclaw.application import (
     build_artifact_query_filters,
     build_collection_list_response,
     build_collection_response,
+    build_research_run_list_response,
+    build_research_run_query_filters,
+    build_research_run_response,
     build_workflow_list_response,
 )
 from medclaw.evidence.api_models import CollectionBundleArtifactRecord
@@ -27,6 +30,8 @@ from medclaw.interfaces.cli.common import (
     emit_artifact_record,
     emit_artifact_record_list,
     emit_collection_manifest,
+    emit_research_run,
+    emit_research_run_record_list,
     emit_report_summary,
     emit_research_report,
     emit_research_reports,
@@ -427,6 +432,67 @@ def research_collection_show(
         return
 
     emit_collection_manifest(collection_record)
+
+
+@research_app.command("runs")
+def research_runs(
+    search: str | None = typer.Option(None, "--search", help="Filter saved runs by text."),
+    workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
+    collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
+    latest: bool = typer.Option(False, "--latest", help="Return only the newest matching run."),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of runs."),
+):
+    """List saved research runs."""
+    store = get_evidence_store()
+    filters = build_research_run_query_filters(
+        query=search,
+        collection=collection,
+        workflow_id=workflow,
+        latest=latest,
+        limit=limit,
+    )
+    typed_records = store.list_run_record_models(
+        query=search,
+        collection=collection,
+        workflow_id=workflow,
+        latest=latest,
+        limit=limit,
+    )
+
+    if as_json:
+        write_json(build_research_run_list_response(typed_records, filters))
+        return
+
+    emit_research_run_record_list(typed_records)
+
+
+@research_app.command("run-show")
+def research_run_show(
+    run: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Show a saved research run."""
+    store = get_evidence_store()
+    try:
+        run_model = store.load_run(run)
+        record = store.get_run_record_model(run)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if as_json:
+        write_json(
+            build_research_run_response(
+                target=run,
+                path=str(store.resolve_run_path(run)),
+                record=record,
+                run=run_model,
+            )
+        )
+        return
+
+    emit_research_run(run_model)
 
 
 @research_app.command("show")

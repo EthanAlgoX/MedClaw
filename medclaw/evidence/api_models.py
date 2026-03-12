@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
-from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport
+from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport, ResearchRun
 
 
 class ResearchReportResponse(BaseModel):
@@ -20,6 +20,50 @@ class ResearchReportListResponse(BaseModel):
 
     items: list[ResearchReport]
     total: int
+
+
+class ResearchRunRecord(BaseModel):
+    """Saved research run index record."""
+
+    id: str
+    path: str
+    filename: str
+    scope: Literal["workflow", "collection"]
+    query: str
+    collection: str = ""
+    status: str = "completed"
+    started_at: str
+    completed_at: str
+    workflow_count: int = 0
+    workflow_ids: list[str] = Field(default_factory=list)
+    bundle_saved_path: str = ""
+
+
+class ResearchRunQueryFilters(BaseModel):
+    """Query filters applied to research run listing endpoints."""
+
+    query: str | None = None
+    collection: str | None = None
+    workflow_id: str | None = None
+    latest: bool = False
+    limit: int = 50
+
+
+class ResearchRunListResponse(BaseModel):
+    """Typed research run list response."""
+
+    items: list[ResearchRunRecord]
+    total: int
+    filters: ResearchRunQueryFilters
+
+
+class ResearchRunResponse(BaseModel):
+    """Typed resolved research run response."""
+
+    target: str
+    path: str
+    record: ResearchRunRecord
+    run: ResearchRun
 
 
 class ReportArtifactRecord(BaseModel):
@@ -71,6 +115,8 @@ ArtifactPayload = ResearchReport | list[EvidenceItem] | list[Citation] | dict[st
 
 _ARTIFACT_RECORD_ADAPTER = TypeAdapter(ArtifactRecord)
 _ARTIFACT_RECORD_LIST_ADAPTER = TypeAdapter(list[ArtifactRecord])
+_RUN_RECORD_ADAPTER = TypeAdapter(ResearchRunRecord)
+_RUN_RECORD_LIST_ADAPTER = TypeAdapter(list[ResearchRunRecord])
 
 
 class ArtifactQueryFilters(BaseModel):
@@ -189,3 +235,13 @@ def collection_record_from_dict(record: dict[str, Any]) -> CollectionRecord:
 def collection_records_from_dicts(records: list[dict[str, Any]]) -> list[CollectionRecord]:
     """Validate a list of collection records."""
     return [collection_record_from_dict(record) for record in records]
+
+
+def research_run_record_from_dict(record: dict[str, Any]) -> ResearchRunRecord:
+    """Validate one research run record."""
+    return _RUN_RECORD_ADAPTER.validate_python(record)
+
+
+def research_run_records_from_dicts(records: list[dict[str, Any]]) -> list[ResearchRunRecord]:
+    """Validate a list of research run records."""
+    return _RUN_RECORD_LIST_ADAPTER.validate_python(records)

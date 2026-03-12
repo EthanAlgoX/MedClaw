@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport
+from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport, ResearchRun, WorkflowRun
 from medclaw.evidence.store import EvidenceStore
 
 
@@ -71,6 +71,40 @@ class TestCLI:
             )
         )
         return artifact_paths["report"]
+
+    def _seed_run(
+        self,
+        home: Path,
+        *,
+        run_id: str,
+        query: str,
+        collection: str,
+        workflow_ids: list[str],
+        completed_at: str,
+        bundle_saved_path: str = "",
+    ) -> Path:
+        workspace = home / ".medclaw" / "workspace"
+        store = EvidenceStore(workspace)
+        workflow_runs = [
+            WorkflowRun(
+                workflow_id=workflow_id,
+                question=query,
+                completed_at=completed_at,
+                started_at=completed_at,
+            )
+            for workflow_id in workflow_ids
+        ]
+        return store.save_run(
+            ResearchRun(
+                id=run_id,
+                query=query,
+                collection=collection,
+                started_at=completed_at,
+                completed_at=completed_at,
+                workflow_runs=workflow_runs,
+                metadata={"bundle_saved_path": bundle_saved_path} if bundle_saved_path else {},
+            )
+        )
 
     def test_version_command(self):
         """Test version command returns version."""
@@ -653,6 +687,107 @@ class TestCLI:
         assert "--kind" in result.stdout
         assert "--latest" in result.stdout
         assert "--latest-by-collection" in result.stdout
+
+    def test_research_runs_help_includes_run_filters(self):
+        """Research runs help should expose list/show entrypoints and filters."""
+        result = subprocess.run(
+            ["medclaw", "research", "runs", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "--search" in result.stdout
+        assert "--workflow" in result.stdout
+        assert "--collection" in result.stdout
+        assert "--latest" in result.stdout
+        assert "--json" in result.stdout
+
+    def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
+        """Research runs command should expose typed saved run records."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_run(
+            test_home,
+            run_id="run-001",
+            query="KRAS inhibitors",
+            collection="KRAS Program",
+            workflow_ids=["literature_review"],
+            completed_at="2026-03-08T09:00:00+00:00",
+        )
+        self._seed_run(
+            test_home,
+            run_id="run-002",
+            query="EGFR biomarkers",
+            collection="EGFR Program",
+            workflow_ids=["study_design", "evidence_brief"],
+            completed_at="2026-03-09T09:00:00+00:00",
+            bundle_saved_path="/tmp/bundle_summary.md",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "runs", "--workflow", "study_design", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        latest_result = subprocess.run(
+            ["medclaw", "research", "runs", "--latest", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["total"] == 1
+        assert payload["items"][0]["id"] == "run-002"
+        assert payload["items"][0]["scope"] == "collection"
+
+        assert latest_result.returncode == 0
+        latest_payload = json.loads(latest_result.stdout)
+        assert latest_payload["total"] == 1
+        assert latest_payload["items"][0]["id"] == "run-002"
+
+    def test_research_run_show_command_returns_saved_run(self, tmp_path, monkeypatch):
+        """Research run-show command should return the selected run payload."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        run_path = self._seed_run(
+            test_home,
+            run_id="run-001",
+            query="KRAS inhibitors",
+            collection="KRAS Program",
+            workflow_ids=["literature_review", "evidence_brief"],
+            completed_at="2026-03-08T09:00:00+00:00",
+            bundle_saved_path="/tmp/bundle_summary.md",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "run-show", "run-001", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        text_result = subprocess.run(
+            ["medclaw", "research", "run-show", str(run_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["record"]["id"] == "run-001"
+        assert payload["record"]["scope"] == "collection"
+        assert payload["run"]["workflow_runs"][0]["workflow_id"] == "literature_review"
+
+        assert text_result.returncode == 0
+        assert "Research Run run-001" in text_result.stdout
+        assert "collection: KRAS Program" in text_result.stdout
 
     def test_research_artifacts_command_lists_saved_reports(self, tmp_path, monkeypatch):
         """Research artifacts command should list stored report records."""
