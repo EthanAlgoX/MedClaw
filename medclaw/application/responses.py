@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from medclaw.application.query_models import (
+    ConfigResponse,
+    ConfigSummary,
+    ProviderListResponse,
+    ProviderResponse,
+    ProviderSummary,
     SkillListResponse,
     SkillSummary,
+    WorkspaceResponse,
+    WorkspaceSummary,
     WorkflowListResponse,
     WorkflowSummary,
 )
@@ -22,6 +29,95 @@ from medclaw.evidence.api_models import (
     ResearchReportResponse,
 )
 from medclaw.evidence.models import ResearchReport
+
+
+def build_provider_summary(
+    *,
+    name: str,
+    configured: bool,
+    has_api_key: bool,
+    base_url: str | None = None,
+    organization: str | None = None,
+    is_default: bool = False,
+) -> ProviderSummary:
+    """Build a typed provider summary."""
+    return ProviderSummary(
+        name=name,
+        configured=configured,
+        has_api_key=has_api_key,
+        base_url=base_url,
+        organization=organization,
+        is_default=is_default,
+    )
+
+
+def build_provider_list_response(
+    providers: list[ProviderSummary],
+    *,
+    default_provider: str,
+) -> ProviderListResponse:
+    """Build a typed provider listing response."""
+    return ProviderListResponse(
+        items=providers,
+        total=len(providers),
+        default_provider=default_provider,
+    )
+
+
+def build_provider_response(provider: ProviderSummary) -> ProviderResponse:
+    """Build a typed single-provider response."""
+    return ProviderResponse(item=provider)
+
+
+def build_workspace_summary(
+    *,
+    path: str,
+    exists: bool,
+    skills_path: str,
+    memory_path: str,
+    reports_path: str,
+    research_path: str,
+    collections_path: str,
+) -> WorkspaceSummary:
+    """Build a typed workspace summary."""
+    return WorkspaceSummary(
+        path=path,
+        exists=exists,
+        skills_path=skills_path,
+        memory_path=memory_path,
+        reports_path=reports_path,
+        research_path=research_path,
+        collections_path=collections_path,
+    )
+
+
+def build_workspace_response(workspace: WorkspaceSummary) -> WorkspaceResponse:
+    """Build a typed workspace response."""
+    return WorkspaceResponse(item=workspace)
+
+
+def build_config_response(
+    *,
+    config_path: str,
+    workspace: WorkspaceSummary,
+    default_provider: str,
+    default_model: str,
+    temperature: float,
+    max_tokens: int,
+    providers: list[ProviderSummary],
+) -> ConfigResponse:
+    """Build a typed config response."""
+    return ConfigResponse(
+        item=ConfigSummary(
+            config_path=config_path,
+            workspace=workspace,
+            default_provider=default_provider,
+            default_model=default_model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            providers=providers,
+        )
+    )
 
 
 def build_research_report_response(report: ResearchReport) -> ResearchReportResponse:

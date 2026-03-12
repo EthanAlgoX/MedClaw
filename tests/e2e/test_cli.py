@@ -155,6 +155,88 @@ class TestCLI:
         # Should complete without error
         assert result.returncode == 0
 
+    def test_system_workspace_command_supports_json(self, tmp_path, monkeypatch):
+        """System workspace command should expose structured JSON output."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "system", "workspace", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["item"]["path"].endswith(".medclaw/workspace")
+        assert payload["item"]["collections_path"].endswith("research/collections")
+
+    def test_system_providers_and_config_commands_support_json(self, tmp_path, monkeypatch):
+        """System provider/config commands should expose structured JSON output."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        providers_result = subprocess.run(
+            ["medclaw", "system", "providers", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        config_result = subprocess.run(
+            ["medclaw", "system", "config", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert providers_result.returncode == 0
+        providers_payload = json.loads(providers_result.stdout)
+        assert providers_payload["default_provider"] == "openrouter"
+        assert providers_payload["total"] >= 1
+
+        assert config_result.returncode == 0
+        config_payload = json.loads(config_result.stdout)
+        assert config_payload["item"]["default_provider"] == "openrouter"
+        assert config_payload["item"]["workspace"]["path"].endswith(".medclaw/workspace")
+
+    def test_system_provider_set_updates_config(self, tmp_path, monkeypatch):
+        """System provider-set command should persist provider configuration."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "system",
+                "provider-set",
+                "deepseek",
+                "--api-key",
+                "test-key",
+                "--base-url",
+                "https://api.deepseek.com",
+                "--default",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["item"]["name"] == "deepseek"
+        assert payload["item"]["has_api_key"] is True
+        assert payload["item"]["is_default"] is True
+
+        config_path = test_home / ".medclaw" / "config.json"
+        config_payload = json.loads(config_path.read_text(encoding="utf-8"))
+        assert config_payload["providers"]["deepseek"]["apiKey"] == "test-key"
+        assert config_payload["agents"]["defaults"]["provider"] == "deepseek"
+
     def test_help_command(self):
         """Test help command works."""
         result = subprocess.run(

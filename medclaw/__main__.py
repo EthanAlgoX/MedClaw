@@ -23,9 +23,15 @@ from medclaw.application import (
     build_artifact_query_filters,
     build_collection_list_response,
     build_collection_response,
+    build_config_response,
+    build_provider_list_response,
+    build_provider_response,
+    build_provider_summary,
     build_research_report_list_response,
     build_research_report_response,
     build_skill_list_response,
+    build_workspace_response,
+    build_workspace_summary,
     build_workflow_list_response,
 )
 from medclaw.evidence.api_models import ArtifactRecord, CollectionBundleArtifactRecord, CollectionRecord
@@ -45,15 +51,18 @@ from medclaw.config.loader import (
     load_config,
     save_config,
 )
+from medclaw.config.schema import ProviderConfig
 from medclaw.providers.deepseek import DeepSeekProvider
 from medclaw.providers.openrouter import OpenRouterProvider
 from medclaw.utils.logging import setup_logging
 
 app = typer.Typer(help="MedClaw - AI-powered medical research assistant")
 research_app = typer.Typer(help="Typed medical research workflows")
+system_app = typer.Typer(help="System inspection and configuration")
 console = Console()
 
 app.add_typer(research_app, name="research")
+app.add_typer(system_app, name="system")
 
 
 def get_provider(config):
@@ -184,6 +193,126 @@ def agent(
             console.print(f"[red]Error:[/red] {e}")
 
 
+@system_app.command("workspace")
+def system_workspace(
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Show workspace paths and layout."""
+    workspace_summary = _build_workspace_summary()
+    if as_json:
+        _write_json(build_workspace_response(workspace_summary))
+        return
+
+    console.print("[bold]Workspace:[/bold]")
+    console.print(f"path: {workspace_summary.path}")
+    console.print(f"exists: {workspace_summary.exists}")
+    console.print(f"skills: {workspace_summary.skills_path}")
+    console.print(f"memory: {workspace_summary.memory_path}")
+    console.print(f"reports: {workspace_summary.reports_path}")
+    console.print(f"research: {workspace_summary.research_path}")
+    console.print(f"collections: {workspace_summary.collections_path}")
+
+
+@system_app.command("providers")
+def system_providers(
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Show configured providers and default selection."""
+    config = load_config()
+    providers = _build_provider_summaries(config)
+    if as_json:
+        _write_json(build_provider_list_response(providers, default_provider=config.agents.defaults.provider))
+        return
+
+    console.print("[bold]Providers:[/bold]")
+    for provider in providers:
+        status = "configured" if provider.configured else "not-configured"
+        suffix = " default" if provider.is_default else ""
+        console.print(f"  - {provider.name}: {status}{suffix}")
+        console.print(f"      api key: {'set' if provider.has_api_key else 'missing'}")
+        if provider.base_url:
+            console.print(f"      base url: {provider.base_url}")
+        if provider.organization:
+            console.print(f"      organization: {provider.organization}")
+
+
+@system_app.command("config")
+def system_config(
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Show configuration summary."""
+    config = load_config()
+    workspace_summary = _build_workspace_summary()
+    providers = _build_provider_summaries(config)
+    response = build_config_response(
+        config_path=str(get_default_config_path()),
+        workspace=workspace_summary,
+        default_provider=config.agents.defaults.provider,
+        default_model=config.agents.defaults.model,
+        temperature=config.agents.defaults.temperature,
+        max_tokens=config.agents.defaults.maxTokens,
+        providers=providers,
+    )
+    if as_json:
+        _write_json(response)
+        return
+
+    console.print("[bold]Config:[/bold]")
+    console.print(f"config path: {response.item.config_path}")
+    console.print(f"default provider: {response.item.default_provider}")
+    console.print(f"default model: {response.item.default_model}")
+    console.print(f"temperature: {response.item.temperature}")
+    console.print(f"max tokens: {response.item.max_tokens}")
+    console.print(f"workspace: {response.item.workspace.path}")
+
+
+@system_app.command("provider-set")
+def system_provider_set(
+    name: str,
+    api_key: str | None = typer.Option(None, "--api-key", help="Provider API key."),
+    base_url: str | None = typer.Option(None, "--base-url", help="Provider base URL."),
+    organization: str | None = typer.Option(None, "--organization", help="Provider organization."),
+    make_default: bool = typer.Option(False, "--default", help="Make this the default provider."),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Create or update one provider configuration."""
+    if name not in {"openai", "anthropic", "openrouter", "deepseek", "google"}:
+        console.print("[red]Error:[/red] Unsupported provider. Choose from: openai, anthropic, openrouter, deepseek, google")
+        raise typer.Exit(1)
+
+    config = load_config()
+    current = getattr(config.providers, name, None) or ProviderConfig()
+    updated = ProviderConfig(
+        apiKey=api_key if api_key is not None else current.apiKey,
+        baseUrl=base_url if base_url is not None else current.baseUrl,
+        organization=organization if organization is not None else current.organization,
+    )
+    setattr(config.providers, name, updated)
+    if make_default:
+        config.agents.defaults.provider = name
+    save_config(config)
+
+    provider = build_provider_summary(
+        name=name,
+        configured=True,
+        has_api_key=bool(updated.apiKey),
+        base_url=updated.baseUrl,
+        organization=updated.organization,
+        is_default=config.agents.defaults.provider == name,
+    )
+    if as_json:
+        _write_json(build_provider_response(provider))
+        return
+
+    console.print(f"[green]Updated provider:[/green] {provider.name}")
+    console.print(f"default: {provider.is_default}")
+    console.print(f"api key: {'set' if provider.has_api_key else 'missing'}")
+    if provider.base_url:
+        console.print(f"base url: {provider.base_url}")
+    if provider.organization:
+        console.print(f"organization: {provider.organization}")
+
+
 def _get_research_use_cases() -> MedicalResearchUseCases:
     """Create research use cases for the configured workspace."""
     workspace = get_workspace_path()
@@ -207,6 +336,38 @@ def _get_configured_provider():
         console.print(f"[red]Error:[/red] {str(e)}")
         console.print("Run 'medclaw onboard' to set up your configuration")
         raise typer.Exit(1)
+
+
+def _build_provider_summaries(config) -> list:
+    """Build typed provider summaries from config."""
+    summaries = []
+    for name in ("openai", "anthropic", "openrouter", "deepseek", "google"):
+        provider = getattr(config.providers, name, None)
+        summaries.append(
+            build_provider_summary(
+                name=name,
+                configured=provider is not None,
+                has_api_key=bool(provider and provider.apiKey),
+                base_url=provider.baseUrl if provider else None,
+                organization=provider.organization if provider else None,
+                is_default=config.agents.defaults.provider == name,
+            )
+        )
+    return summaries
+
+
+def _build_workspace_summary() -> object:
+    """Build a typed workspace summary from the configured workspace layout."""
+    workspace = get_workspace_path()
+    return build_workspace_summary(
+        path=str(workspace),
+        exists=workspace.exists(),
+        skills_path=str(workspace / "skills"),
+        memory_path=str(workspace / "memory"),
+        reports_path=str(workspace / "reports"),
+        research_path=str(workspace / "research"),
+        collections_path=str(workspace / "research" / "collections"),
+    )
 
 
 async def _run_research_workflow_report(

@@ -7,9 +7,14 @@ from medclaw.application.responses import (
     build_artifact_query_filters,
     build_collection_list_response,
     build_collection_response,
+    build_config_response,
+    build_provider_response,
+    build_provider_summary,
     build_research_report_list_response,
     build_research_report_response,
     build_skill_list_response,
+    build_workspace_response,
+    build_workspace_summary,
     build_workflow_list_response,
 )
 from medclaw.application.query_models import SkillSummary, WorkflowSummary
@@ -143,3 +148,36 @@ class TestApplicationResponses:
         assert workflow_response.model_dump(mode="json")["items"][0]["id"] == "literature_review"
         assert skill_response.model_dump(mode="json")["items"][0]["name"] == "pubmed-search"
         assert skill_response.model_dump(mode="json")["query"] == "pubmed"
+
+    def test_build_system_responses(self):
+        workspace = build_workspace_summary(
+            path="/tmp/workspace",
+            exists=True,
+            skills_path="/tmp/workspace/skills",
+            memory_path="/tmp/workspace/memory",
+            reports_path="/tmp/workspace/reports",
+            research_path="/tmp/workspace/research",
+            collections_path="/tmp/workspace/research/collections",
+        )
+        provider = build_provider_summary(
+            name="openrouter",
+            configured=True,
+            has_api_key=True,
+            base_url="https://openrouter.ai/api/v1",
+            is_default=True,
+        )
+        config = build_config_response(
+            config_path="/tmp/config.json",
+            workspace=workspace,
+            default_provider="openrouter",
+            default_model="anthropic/claude-sonnet-4-20250514",
+            temperature=0.1,
+            max_tokens=4096,
+            providers=[provider],
+        )
+        provider_response = build_provider_response(provider)
+        workspace_response = build_workspace_response(workspace)
+
+        assert config.model_dump(mode="json")["item"]["default_provider"] == "openrouter"
+        assert provider_response.model_dump(mode="json")["item"]["name"] == "openrouter"
+        assert workspace_response.model_dump(mode="json")["item"]["path"] == "/tmp/workspace"
