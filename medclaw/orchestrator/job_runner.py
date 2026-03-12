@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from medclaw.evidence.models import ResearchReport
+from medclaw.evidence.models import ResearchReport, ResearchRun
 from medclaw.evidence.store import EvidenceStore
 from medclaw.orchestrator.collection_service import CollectionService
 from medclaw.orchestrator.report_persistence import ReportPersistenceService
@@ -61,6 +61,22 @@ class ResearchOrchestrator:
     def save_collection_bundle(self, reports: list[ResearchReport]) -> dict[str, Path]:
         """Persist a collection-level synthesis bundle across multiple workflow reports."""
         return self.report_persistence.save_collection_bundle(reports)
+
+    def persist_collection_run(
+        self,
+        reports: list[ResearchReport],
+        *,
+        query: str,
+        collection: str | None = None,
+        bundle_artifacts: dict[str, Path] | None = None,
+    ) -> ResearchRun:
+        """Persist one aggregate research run across multiple workflow reports."""
+        return self.report_persistence.persist_collection_run(
+            reports,
+            query=query,
+            collection=collection,
+            bundle_artifacts=bundle_artifacts,
+        )
 
     def _resolve_collection_context(self, collection: str | None) -> dict[str, object] | None:
         """Load saved collection context when available and preserve ad-hoc collection names."""

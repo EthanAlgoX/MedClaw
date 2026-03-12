@@ -96,12 +96,16 @@ class MedicalResearchUseCases:
                     collection=collection,
                 )
             )
+        bundle_artifacts = None
         if persist_bundle and len(reports) > 1:
             bundle_artifacts = self.orchestrator.save_collection_bundle(reports)
-            bundle_paths = {name: str(path) for name, path in bundle_artifacts.items()}
-            for report in reports:
-                report.metadata["bundle_artifact_paths"] = bundle_paths
-                report.metadata["bundle_saved_path"] = bundle_paths["bundle_markdown"]
+        if len(reports) > 1:
+            self.orchestrator.persist_collection_run(
+                reports,
+                query=query,
+                collection=collection,
+                bundle_artifacts=bundle_artifacts,
+            )
         return reports
 
     def list_workflows(self) -> list[dict[str, str]]:

@@ -285,6 +285,16 @@ def test_run_collection_reports_can_execute_all_preferred_workflows(temp_workspa
     )
 
     assert [report.workflow_id for report in reports] == ["study_design", "evidence_brief"]
+    assert reports[0].metadata["run_scope"] == "collection"
+    assert reports[0].metadata["run_id"] == reports[1].metadata["run_id"]
+    assert reports[0].metadata["run_path"] == reports[1].metadata["run_path"]
+    assert reports[0].metadata["workflow_run_id"] != reports[0].metadata["run_id"]
+    saved_run = use_cases.orchestrator.evidence_store.load_run(reports[0].metadata["run_path"])
+    assert saved_run.collection == "EGFR Program"
+    assert [workflow_run.workflow_id for workflow_run in saved_run.workflow_runs] == [
+        "study_design",
+        "evidence_brief",
+    ]
 
 
 def test_run_collection_reports_can_persist_bundle_artifacts(temp_workspace: Path, monkeypatch):
@@ -322,6 +332,9 @@ def test_run_collection_reports_can_persist_bundle_artifacts(temp_workspace: Pat
     assert len(reports) == 2
     assert reports[0].metadata["bundle_saved_path"].endswith("bundle_summary.md")
     assert reports[0].metadata["bundle_artifact_paths"]["bundle_json"].endswith("bundle_summary.json")
+    saved_run = use_cases.orchestrator.evidence_store.load_run(reports[0].metadata["run_path"])
+    assert saved_run.metadata["bundle_saved_path"].endswith("bundle_summary.md")
+    assert saved_run.metadata["bundle_artifact_paths"]["bundle_json"].endswith("bundle_summary.json")
 
 
 def test_run_collection_reports_can_override_collection_preference(temp_workspace: Path, monkeypatch):
