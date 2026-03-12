@@ -17,6 +17,8 @@ from medclaw.application import (
     build_research_run_list_response,
     build_research_run_query_filters,
     build_research_run_response,
+    build_research_timeline_list_response,
+    build_research_timeline_query_filters,
     build_workflow_list_response,
 )
 from medclaw.evidence.api_models import CollectionBundleArtifactRecord
@@ -32,6 +34,7 @@ from medclaw.interfaces.cli.common import (
     emit_collection_manifest,
     emit_research_run,
     emit_research_run_record_list,
+    emit_research_timeline,
     emit_report_summary,
     emit_research_report,
     emit_research_reports,
@@ -465,6 +468,36 @@ def research_runs(
         return
 
     emit_research_run_record_list(typed_records)
+
+
+@research_app.command("timeline")
+def research_timeline(
+    search: str | None = typer.Option(None, "--search", help="Filter timeline events by text."),
+    workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow id."),
+    collection: str | None = typer.Option(None, "--collection", help="Filter by collection name."),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    limit: int = typer.Option(30, "--limit", min=1, help="Maximum number of events."),
+):
+    """Show a unified project timeline across reports, bundles, and runs."""
+    store = get_evidence_store()
+    filters = build_research_timeline_query_filters(
+        query=search,
+        collection=collection,
+        workflow_id=workflow,
+        limit=limit,
+    )
+    typed_records = store.list_timeline_record_models(
+        query=search,
+        collection=collection,
+        workflow_id=workflow,
+        limit=limit,
+    )
+
+    if as_json:
+        write_json(build_research_timeline_list_response(typed_records, filters))
+        return
+
+    emit_research_timeline(typed_records)
 
 
 @research_app.command("run-show")

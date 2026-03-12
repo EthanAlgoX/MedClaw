@@ -18,6 +18,7 @@ from medclaw.evidence.api_models import (
     CollectionManifest,
     CollectionRecord,
     ResearchRunRecord,
+    ResearchTimelineRecord,
     artifact_record_from_dict,
     artifact_records_from_dicts,
     collection_manifest_from_dict,
@@ -25,6 +26,7 @@ from medclaw.evidence.api_models import (
     collection_records_from_dicts,
     research_run_record_from_dict,
     research_run_records_from_dicts,
+    research_timeline_records_from_dicts,
 )
 from medclaw.evidence.models import Citation, ResearchReport, ResearchRun
 
@@ -238,6 +240,66 @@ class EvidenceStore:
                 collection=collection,
                 workflow_id=workflow_id,
                 latest=latest,
+                limit=limit,
+            )
+        )
+
+    def list_timeline_records(
+        self,
+        query: str | None = None,
+        collection: str | None = None,
+        workflow_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List a unified chronological view across reports, bundles, and runs."""
+        report_records = self.filter_report_records(
+            query=query,
+            workflow_id=workflow_id,
+            collection=collection,
+            limit=limit * 3,
+        )
+        bundle_records = self.filter_collection_bundle_records(
+            query=query,
+            workflow_id=workflow_id,
+            collection=collection,
+            limit=limit * 3,
+        )
+        run_records = self.list_run_records(
+            query=query,
+            collection=collection,
+            workflow_id=workflow_id,
+            limit=limit * 3,
+        )
+
+        records = [
+            self._timeline_record_from_report(record)
+            for record in report_records
+        ] + [
+            self._timeline_record_from_bundle(record)
+            for record in bundle_records
+        ] + [
+            self._timeline_record_from_run(record)
+            for record in run_records
+        ]
+        records.sort(
+            key=lambda record: (record["timestamp"], record["kind"], record["id"]),
+            reverse=True,
+        )
+        return records[:limit]
+
+    def list_timeline_record_models(
+        self,
+        query: str | None = None,
+        collection: str | None = None,
+        workflow_id: str | None = None,
+        limit: int = 50,
+    ) -> list[ResearchTimelineRecord]:
+        """List a unified chronological view as typed models."""
+        return research_timeline_records_from_dicts(
+            self.list_timeline_records(
+                query=query,
+                collection=collection,
+                workflow_id=workflow_id,
                 limit=limit,
             )
         )
@@ -903,6 +965,51 @@ class EvidenceStore:
             "workflow_count": len(workflow_ids),
             "workflow_ids": workflow_ids,
             "bundle_saved_path": str(run.metadata.get("bundle_saved_path", "")).strip(),
+        }
+
+    def _timeline_record_from_report(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Project one report artifact record into the unified timeline."""
+        return {
+            "kind": "report",
+            "id": record["id"],
+            "path": record["path"],
+            "collection": record.get("collection", ""),
+            "timestamp": record["generated_at"],
+            "title": record["title"],
+            "query": record["question"],
+            "workflow_ids": [record["workflow_id"]],
+            "scope": "workflow",
+            "summary_preview": record.get("summary_preview", ""),
+        }
+
+    def _timeline_record_from_bundle(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Project one collection bundle artifact record into the unified timeline."""
+        return {
+            "kind": "collection_bundle",
+            "id": record["id"],
+            "path": record["path"],
+            "collection": record.get("collection", ""),
+            "timestamp": record["generated_at"],
+            "title": record["title"],
+            "query": "",
+            "workflow_ids": record.get("workflow_ids", []),
+            "scope": "collection",
+            "summary_preview": record.get("summary_preview", ""),
+        }
+
+    def _timeline_record_from_run(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Project one research run record into the unified timeline."""
+        return {
+            "kind": "research_run",
+            "id": record["id"],
+            "path": record["path"],
+            "collection": record.get("collection", ""),
+            "timestamp": record["completed_at"],
+            "title": f"Research Run: {record['id']}",
+            "query": record["query"],
+            "workflow_ids": record.get("workflow_ids", []),
+            "scope": record.get("scope", ""),
+            "summary_preview": "",
         }
 
     def _collection_bundle_payload(

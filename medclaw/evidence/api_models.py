@@ -66,6 +66,38 @@ class ResearchRunResponse(BaseModel):
     run: ResearchRun
 
 
+class ResearchTimelineRecord(BaseModel):
+    """One event in the unified research project timeline."""
+
+    kind: Literal["report", "collection_bundle", "research_run"]
+    id: str
+    path: str
+    collection: str = ""
+    timestamp: str
+    title: str
+    query: str = ""
+    workflow_ids: list[str] = Field(default_factory=list)
+    scope: str = ""
+    summary_preview: str = ""
+
+
+class ResearchTimelineQueryFilters(BaseModel):
+    """Query filters applied to research timeline endpoints."""
+
+    query: str | None = None
+    collection: str | None = None
+    workflow_id: str | None = None
+    limit: int = 50
+
+
+class ResearchTimelineListResponse(BaseModel):
+    """Typed research timeline response."""
+
+    items: list[ResearchTimelineRecord]
+    total: int
+    filters: ResearchTimelineQueryFilters
+
+
 class ReportArtifactRecord(BaseModel):
     """Saved report artifact index record."""
 
@@ -117,6 +149,8 @@ _ARTIFACT_RECORD_ADAPTER = TypeAdapter(ArtifactRecord)
 _ARTIFACT_RECORD_LIST_ADAPTER = TypeAdapter(list[ArtifactRecord])
 _RUN_RECORD_ADAPTER = TypeAdapter(ResearchRunRecord)
 _RUN_RECORD_LIST_ADAPTER = TypeAdapter(list[ResearchRunRecord])
+_TIMELINE_RECORD_ADAPTER = TypeAdapter(ResearchTimelineRecord)
+_TIMELINE_RECORD_LIST_ADAPTER = TypeAdapter(list[ResearchTimelineRecord])
 
 
 class ArtifactQueryFilters(BaseModel):
@@ -245,3 +279,13 @@ def research_run_record_from_dict(record: dict[str, Any]) -> ResearchRunRecord:
 def research_run_records_from_dicts(records: list[dict[str, Any]]) -> list[ResearchRunRecord]:
     """Validate a list of research run records."""
     return _RUN_RECORD_LIST_ADAPTER.validate_python(records)
+
+
+def research_timeline_record_from_dict(record: dict[str, Any]) -> ResearchTimelineRecord:
+    """Validate one research timeline record."""
+    return _TIMELINE_RECORD_ADAPTER.validate_python(record)
+
+
+def research_timeline_records_from_dicts(records: list[dict[str, Any]]) -> list[ResearchTimelineRecord]:
+    """Validate a list of research timeline records."""
+    return _TIMELINE_RECORD_LIST_ADAPTER.validate_python(records)

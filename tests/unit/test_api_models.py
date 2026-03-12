@@ -9,10 +9,13 @@ from medclaw.evidence.api_models import (
     ResearchRunListResponse,
     ResearchRunQueryFilters,
     ResearchRunResponse,
+    ResearchTimelineListResponse,
+    ResearchTimelineQueryFilters,
     ResearchReportListResponse,
     ResearchReportResponse,
     artifact_record_from_dict,
     research_run_record_from_dict,
+    research_timeline_record_from_dict,
 )
 from medclaw.evidence.models import ResearchReport, ResearchRun, WorkflowRun
 
@@ -177,3 +180,24 @@ class TestArtifactApiModels:
 
         assert list_response.model_dump(mode="json")["items"][0]["scope"] == "collection"
         assert payload_response.model_dump(mode="json")["run"]["workflow_runs"][0]["workflow_id"] == "study_design"
+
+    def test_research_timeline_response_models_dump_envelopes(self):
+        record = research_timeline_record_from_dict(
+            {
+                "kind": "research_run",
+                "id": "run-123",
+                "path": "/tmp/run-123.json",
+                "collection": "KRAS Program",
+                "timestamp": "2026-03-08T09:10:00+00:00",
+                "title": "Research Run: run-123",
+                "query": "KRAS inhibitors",
+                "workflow_ids": ["study_design", "evidence_brief"],
+                "scope": "collection",
+                "summary_preview": "",
+            }
+        )
+        filters = ResearchTimelineQueryFilters(collection="KRAS Program", limit=10)
+        response = ResearchTimelineListResponse(items=[record], total=1, filters=filters)
+
+        assert response.model_dump(mode="json")["items"][0]["kind"] == "research_run"
+        assert response.model_dump(mode="json")["filters"]["collection"] == "KRAS Program"

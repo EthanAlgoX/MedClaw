@@ -121,6 +121,62 @@ class TestEvidenceStore:
         assert resolved.id == "workflow-run"
         assert resolved.path == str(workflow_run)
 
+    def test_list_timeline_records_merges_reports_bundles_and_runs(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="KRAS inhibitors",
+                title="KRAS Review",
+                summary="Summary",
+                generated_at="2026-03-08T09:00:00+00:00",
+                metadata={"collection": "KRAS Program"},
+            )
+        )
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        store.save_run(
+            ResearchRun(
+                id="run-123",
+                query="KRAS inhibitors",
+                collection="KRAS Program",
+                started_at="2026-03-08T09:06:00+00:00",
+                completed_at="2026-03-08T09:06:00+00:00",
+                workflow_runs=[
+                    WorkflowRun(workflow_id="study_design", question="KRAS inhibitors"),
+                    WorkflowRun(workflow_id="evidence_brief", question="KRAS inhibitors"),
+                ],
+            )
+        )
+
+        records = store.list_timeline_records(collection="KRAS Program", limit=10)
+        typed_records = store.list_timeline_record_models(collection="KRAS Program", workflow_id="study_design", limit=10)
+
+        assert [record["kind"] for record in records[:3]] == ["collection_bundle", "research_run", "report"]
+        assert all(record["collection"] == "KRAS Program" for record in records)
+        assert len(typed_records) == 1
+        assert typed_records[0].kind == "research_run"
+        assert typed_records[0].workflow_ids == ["study_design", "evidence_brief"]
+
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
         report = ResearchReport(

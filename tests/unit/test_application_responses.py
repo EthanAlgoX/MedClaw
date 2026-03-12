@@ -13,6 +13,8 @@ from medclaw.application.responses import (
     build_research_run_list_response,
     build_research_run_query_filters,
     build_research_run_response,
+    build_research_timeline_list_response,
+    build_research_timeline_query_filters,
     build_research_report_list_response,
     build_research_report_response,
     build_skill_list_response,
@@ -26,6 +28,7 @@ from medclaw.evidence.api_models import (
     collection_manifest_from_dict,
     collection_record_from_dict,
     research_run_record_from_dict,
+    research_timeline_record_from_dict,
 )
 from medclaw.evidence.models import ResearchReport, ResearchRun, WorkflowRun
 
@@ -81,6 +84,28 @@ class TestApplicationResponses:
 
         assert list_response.model_dump(mode="json")["items"][0]["workflow_ids"] == ["literature_review"]
         assert response.model_dump(mode="json")["record"]["id"] == "run-123"
+
+    def test_build_research_timeline_response(self):
+        record = research_timeline_record_from_dict(
+            {
+                "kind": "report",
+                "id": "report.json",
+                "path": "/tmp/report.json",
+                "collection": "KRAS Program",
+                "timestamp": "2026-03-08T09:00:00+00:00",
+                "title": "KRAS Review",
+                "query": "KRAS inhibitors",
+                "workflow_ids": ["literature_review"],
+                "scope": "workflow",
+                "summary_preview": "Summary",
+            }
+        )
+
+        filters = build_research_timeline_query_filters(collection="KRAS Program", limit=10)
+        response = build_research_timeline_list_response([record], filters)
+
+        assert response.model_dump(mode="json")["items"][0]["title"] == "KRAS Review"
+        assert response.model_dump(mode="json")["filters"]["collection"] == "KRAS Program"
 
     def test_build_artifact_responses(self):
         filters = build_artifact_query_filters(kind="report", latest=True, limit=1)

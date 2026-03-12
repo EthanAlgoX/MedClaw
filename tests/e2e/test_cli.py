@@ -704,6 +704,21 @@ class TestCLI:
         assert "--latest" in result.stdout
         assert "--json" in result.stdout
 
+    def test_research_timeline_help_includes_filters(self):
+        """Research timeline help should expose its filtering options."""
+        result = subprocess.run(
+            ["medclaw", "research", "timeline", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "--search" in result.stdout
+        assert "--workflow" in result.stdout
+        assert "--collection" in result.stdout
+        assert "--json" in result.stdout
+
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
         """Research runs command should expose typed saved run records."""
         test_home = tmp_path / "test_home"
@@ -788,6 +803,75 @@ class TestCLI:
         assert text_result.returncode == 0
         assert "Research Run run-001" in text_result.stdout
         assert "collection: KRAS Program" in text_result.stdout
+
+    def test_research_timeline_command_merges_runs_and_artifacts(self, tmp_path, monkeypatch):
+        """Research timeline should unify runs, reports, and bundle artifacts."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="KRAS Review",
+            question="KRAS inhibitors",
+            summary="Summary",
+            generated_at="2026-03-08T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="evidence_brief",
+                    question="KRAS inhibitors",
+                    title="Evidence Brief: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        self._seed_run(
+            test_home,
+            run_id="run-001",
+            query="KRAS inhibitors",
+            collection="KRAS Program",
+            workflow_ids=["study_design", "evidence_brief"],
+            completed_at="2026-03-08T09:06:00+00:00",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "timeline", "--collection", "KRAS Program", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        text_result = subprocess.run(
+            ["medclaw", "research", "timeline", "--collection", "KRAS Program"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["total"] == 3
+        assert [item["kind"] for item in payload["items"]] == ["collection_bundle", "research_run", "report"]
+        assert payload["items"][0]["collection"] == "KRAS Program"
+
+        assert text_result.returncode == 0
+        assert "Research Timeline" in text_result.stdout
+        assert "(research_run)" in text_result.stdout
+        assert "(collection_bundle)" in text_result.stdout
 
     def test_research_artifacts_command_lists_saved_reports(self, tmp_path, monkeypatch):
         """Research artifacts command should list stored report records."""

@@ -31,7 +31,13 @@ from medclaw.config.loader import (
     load_config,
 )
 from medclaw.config.schema import ProviderConfig
-from medclaw.evidence.api_models import ArtifactRecord, CollectionBundleArtifactRecord, CollectionRecord
+from medclaw.evidence.api_models import (
+    ArtifactRecord,
+    CollectionBundleArtifactRecord,
+    CollectionRecord,
+    ResearchRunRecord,
+    ResearchTimelineRecord,
+)
 from medclaw.evidence.artifacts import (
     CLI_ARTIFACTS,
     CLI_ARTIFACT_HELP,
@@ -39,7 +45,6 @@ from medclaw.evidence.artifacts import (
     build_unsupported_artifact_error,
     normalize_artifact_name,
 )
-from medclaw.evidence.api_models import ResearchRunRecord
 from medclaw.evidence.models import ResearchReport, ResearchRun
 from medclaw.evidence.store import EvidenceStore
 from medclaw.providers.deepseek import DeepSeekProvider
@@ -495,3 +500,27 @@ def emit_research_run_record_list(records: list[ResearchRunRecord]) -> None:
         console.print(f"      query: {record.query}")
         if record.bundle_saved_path:
             console.print(f"      bundle: {record.bundle_saved_path}")
+
+
+def emit_research_timeline(records: list[ResearchTimelineRecord]) -> None:
+    """Render a unified project timeline across runs and artifacts."""
+    if not records:
+        console.print("[yellow]No research timeline events matched the current filters.[/yellow]")
+        return
+
+    console.print("[bold]Research Timeline:[/bold]")
+    for record in records:
+        event_date = record.timestamp.split("T", 1)[0] if record.timestamp else "n/a"
+        console.print(
+            "  - "
+            f"{event_date} ({record.kind}) {record.title}"
+        )
+        if record.collection:
+            console.print(f"      collection: {record.collection}")
+        if record.workflow_ids:
+            console.print(f"      workflows: {', '.join(record.workflow_ids)}")
+        if record.query:
+            console.print(f"      query: {record.query}")
+        if record.scope:
+            console.print(f"      scope: {record.scope}")
+        console.print(f"      path: {record.path}")

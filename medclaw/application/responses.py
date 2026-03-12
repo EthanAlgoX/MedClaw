@@ -29,6 +29,9 @@ from medclaw.evidence.api_models import (
     ResearchRunQueryFilters,
     ResearchRunRecord,
     ResearchRunResponse,
+    ResearchTimelineListResponse,
+    ResearchTimelineQueryFilters,
+    ResearchTimelineRecord,
     ResearchReportListResponse,
     ResearchReportResponse,
 )
@@ -169,6 +172,30 @@ def build_research_run_response(
 ) -> ResearchRunResponse:
     """Build a typed research run payload response."""
     return ResearchRunResponse(target=target, path=path, record=record, run=run)
+
+
+def build_research_timeline_query_filters(
+    *,
+    query: str | None = None,
+    collection: str | None = None,
+    workflow_id: str | None = None,
+    limit: int = 50,
+) -> ResearchTimelineQueryFilters:
+    """Build typed research timeline filter metadata."""
+    return ResearchTimelineQueryFilters(
+        query=query,
+        collection=collection,
+        workflow_id=workflow_id,
+        limit=limit,
+    )
+
+
+def build_research_timeline_list_response(
+    records: list[ResearchTimelineRecord],
+    filters: ResearchTimelineQueryFilters,
+) -> ResearchTimelineListResponse:
+    """Build a typed research timeline list response."""
+    return ResearchTimelineListResponse(items=records, total=len(records), filters=filters)
 
 
 def build_artifact_query_filters(
