@@ -932,6 +932,7 @@ class TestCLI:
         test_home = tmp_path / "test_home"
         test_home.mkdir()
         export_path = tmp_path / "dashboard-export.json"
+        export_md_path = tmp_path / "dashboard-export.md"
         store = EvidenceStore(test_home / ".medclaw" / "workspace")
         store.save_collection_manifest(
             name="Gap Program",
@@ -979,6 +980,8 @@ class TestCLI:
                 "--summary-only",
                 "--export-json-path",
                 str(export_path),
+                "--export-md-path",
+                str(export_md_path),
             ],
             capture_output=True,
             text=True,
@@ -987,12 +990,14 @@ class TestCLI:
 
         assert result.returncode == 0
         assert "dashboard export:" in result.stdout
+        assert "dashboard markdown:" in result.stdout
         assert "total=1 stale=1 unhealthy=1" in result.stdout
         assert "grouped by owner:" in result.stdout
         assert "Translational Team" in result.stdout
         assert "Dormant Program" in result.stdout
         assert "latest run:" not in result.stdout
         assert export_path.exists()
+        assert export_md_path.exists()
 
         export_payload = json.loads(export_path.read_text(encoding="utf-8"))
         assert export_payload["total"] == 1
@@ -1001,6 +1006,13 @@ class TestCLI:
         assert export_payload["summary"]["groups"][0]["label"] == "Translational Team"
         assert export_payload["filters"]["group_by"] == "owner"
         assert export_payload["filters"]["top"] == 1
+
+        export_markdown = export_md_path.read_text(encoding="utf-8")
+        assert "# Collection Dashboard Inventory" in export_markdown
+        assert "## Groups" in export_markdown
+        assert "## Translational Team" in export_markdown
+        assert "### Dormant Program" in export_markdown
+        assert "- Health: no_bundle, no_run, stale_collection" in export_markdown
 
     def test_research_dashboards_command_supports_owner_and_missing_asset_filters(self, tmp_path, monkeypatch):
         """Research dashboards should filter by owner, disease area, and missing assets."""

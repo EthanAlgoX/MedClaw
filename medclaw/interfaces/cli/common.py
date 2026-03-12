@@ -328,6 +328,14 @@ def save_json(payload, path: str | Path) -> Path:
     return target_path
 
 
+def save_text(text: str, path: str | Path) -> Path:
+    """Persist plain text or markdown to disk."""
+    target_path = Path(path).expanduser()
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(text, encoding="utf-8")
+    return target_path
+
+
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
     """Render a single artifact record into user-facing output."""
     if isinstance(record, CollectionBundleArtifactRecord):
@@ -591,6 +599,83 @@ def emit_collection_dashboard_list(
             )
         if dashboard.health_signals:
             console.print(f"      health: {', '.join(dashboard.health_signals)}")
+
+
+def render_collection_dashboard_list_markdown(
+    dashboards: list[CollectionDashboard],
+    *,
+    sort_by: str = "activity",
+    summary_only: bool = False,
+    group_by: str | None = None,
+    summary: CollectionDashboardAggregateSummary | None = None,
+) -> str:
+    """Render a markdown export for the collection dashboard list view."""
+    lines: list[str] = ["# Collection Dashboard Inventory", ""]
+    lines.append(f"- Sort by: `{sort_by}`")
+    if summary_only:
+        lines.append("- View: summary")
+    if summary is not None:
+        lines.append(f"- Total: {summary.total}")
+        lines.append(f"- Stale: {summary.stale}")
+        lines.append(f"- Unhealthy: {summary.unhealthy}")
+        lines.append(f"- Missing preferred: {summary.missing_preferred}")
+        lines.append(f"- Missing bundle: {summary.missing_bundle}")
+        lines.append(f"- Missing run: {summary.missing_run}")
+        lines.append(f"- With bundle: {summary.with_bundle}")
+        lines.append(f"- With run: {summary.with_run}")
+        if summary.grouped_by:
+            grouped_label = "disease area" if summary.grouped_by == "disease_area" else summary.grouped_by
+            lines.append(f"- Grouped by: {grouped_label}")
+    lines.append("")
+
+    if summary is not None and summary.groups:
+        lines.append("## Groups")
+        lines.append("")
+        for group in summary.groups:
+            lines.append(
+                f"- {group.label}: total={group.total}, stale={group.stale}, unhealthy={group.unhealthy}"
+            )
+        lines.append("")
+
+    current_group: str | None = None
+    for dashboard in dashboards:
+        record = dashboard.collection
+        group_label = None
+        if group_by == "owner":
+            group_label = record.owner or "Unspecified"
+        elif group_by == "disease_area":
+            group_label = record.disease_area or "Unspecified"
+        if group_label != current_group and group_by:
+            lines.append(f"## {group_label}")
+            lines.append("")
+            current_group = group_label
+
+        latest = dashboard.latest_activity_at.split("T", 1)[0] if dashboard.latest_activity_at else "n/a"
+        status = f"stale ({dashboard.stale_days} days)" if dashboard.stale else (
+            f"active ({dashboard.stale_days} days)" if dashboard.stale_days is not None else "unknown"
+        )
+        lines.append(f"### {record.collection}")
+        lines.append("")
+        lines.append(f"- Latest activity: {latest}")
+        lines.append(f"- Status: {status}")
+        lines.append(f"- Reports: {record.report_count}")
+        lines.append(f"- Workflows covered: {len(dashboard.covered_workflows)}")
+        if dashboard.health_signals:
+            lines.append(f"- Health: {', '.join(dashboard.health_signals)}")
+        if summary_only:
+            lines.append("")
+            continue
+        if dashboard.latest_run is not None:
+            lines.append(f"- Latest run: {dashboard.latest_run.id}")
+        if dashboard.latest_report is not None:
+            lines.append(f"- Latest report: {dashboard.latest_report.title}")
+        if dashboard.latest_bundle is not None:
+            lines.append(f"- Latest bundle: {dashboard.latest_bundle.path}")
+        if dashboard.missing_preferred_workflows:
+            lines.append(f"- Missing preferred: {', '.join(dashboard.missing_preferred_workflows)}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def emit_research_run(run: ResearchRun) -> None:

@@ -48,9 +48,11 @@ from medclaw.interfaces.cli.common import (
     get_evidence_store,
     get_research_use_cases,
     normalize_artifact_option,
+    render_collection_dashboard_list_markdown,
     read_show_artifact,
     run_research_workflow_report,
     save_json,
+    save_text,
     write_json,
     write_lines,
 )
@@ -634,6 +636,11 @@ def research_dashboards(
         "--export-json-path",
         help="Persist the typed dashboard list response to a JSON file.",
     ),
+    export_md_path: str | None = typer.Option(
+        None,
+        "--export-md-path",
+        help="Persist the dashboard inventory as Markdown.",
+    ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
     timeline_limit: int = typer.Option(5, "--timeline-limit", min=1, help="Maximum timeline events per collection."),
@@ -685,6 +692,17 @@ def research_dashboards(
         saved_path = save_json(response, export_json_path)
         if not as_json:
             console.print(f"dashboard export: {saved_path}")
+    if export_md_path:
+        markdown = render_collection_dashboard_list_markdown(
+            dashboards,
+            sort_by=sort_by,
+            summary_only=summary_only,
+            group_by=normalized_group_by,
+            summary=response.summary,
+        )
+        saved_md_path = save_text(markdown, export_md_path)
+        if not as_json:
+            console.print(f"dashboard markdown: {saved_md_path}")
 
     if as_json:
         write_json(response)
