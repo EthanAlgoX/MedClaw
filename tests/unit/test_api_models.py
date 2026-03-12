@@ -133,6 +133,13 @@ class TestArtifactApiModels:
                 "latest_bundle_generated_at": "",
                 "latest_bundle_markdown_path": "",
                 "latest_bundle_json_path": "",
+                "latest_run_id": "",
+                "latest_run_completed_at": "",
+                "latest_activity_at": "2026-03-08T09:00:00+00:00",
+                "stale": False,
+                "stale_days": 5,
+                "health_signals": ["no_run"],
+                "missing_preferred_workflows": [],
                 "workflows": ["evidence_brief"],
                 "titles": ["Biomarker Brief"],
             }

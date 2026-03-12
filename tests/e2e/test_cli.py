@@ -1649,6 +1649,12 @@ class TestCLI:
             text=True,
             timeout=10,
         )
+        text_result = subprocess.run(
+            ["medclaw", "research", "collections"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
 
         assert result.returncode == 0
         payload = json.loads(result.stdout)
@@ -1657,6 +1663,10 @@ class TestCLI:
         assert payload["items"][0]["report_count"] == 2
         assert payload["items"][0]["owner"] == "Translational Team"
         assert payload["items"][0]["latest_bundle_markdown_path"].endswith("bundle_summary.md")
+        assert payload["items"][0]["health_signals"] == ["no_run"]
+
+        assert text_result.returncode == 0
+        assert "health: no_run" in text_result.stdout
 
     def test_research_collection_set_and_show_commands_manage_manifest(self, tmp_path, monkeypatch):
         """Research collection manifest commands should create and retrieve project metadata."""

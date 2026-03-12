@@ -362,22 +362,29 @@ def research_collections(
 
     console.print("[bold]Research Collections:[/bold]")
     for record in records:
-        latest = record.latest_generated_at.split("T", 1)[0] if record.latest_generated_at else "n/a"
+        latest = record.latest_activity_at.split("T", 1)[0] if record.latest_activity_at else "n/a"
         console.print(
             "  - "
             f"{record.collection} reports={record.report_count} "
             f"evidence={record.evidence_count} citations={record.citation_count} latest={latest}"
         )
+        if record.stale_days is not None:
+            stale_label = "stale" if record.stale else "active"
+            console.print(f"      status: {stale_label} ({record.stale_days} days)")
         if record.owner:
             console.print(f"      owner: {record.owner}")
         if record.disease_area:
             console.print(f"      disease area: {record.disease_area}")
         console.print(f"      workflows: {', '.join(record.workflows)}")
+        if record.missing_preferred_workflows:
+            console.print(f"      missing preferred: {', '.join(record.missing_preferred_workflows)}")
         if record.tags:
             console.print(f"      tags: {', '.join(record.tags)}")
         console.print(f"      titles: {', '.join(record.titles[:3])}")
         if record.latest_bundle_markdown_path:
             console.print(f"      latest bundle: {record.latest_bundle_markdown_path}")
+        if record.health_signals:
+            console.print(f"      health: {', '.join(record.health_signals)}")
 
 
 @research_app.command("collection-set")

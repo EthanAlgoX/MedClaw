@@ -228,6 +228,13 @@ class CollectionRecord(BaseModel):
     latest_bundle_generated_at: str = ""
     latest_bundle_markdown_path: str = ""
     latest_bundle_json_path: str = ""
+    latest_run_id: str = ""
+    latest_run_completed_at: str = ""
+    latest_activity_at: str = ""
+    stale: bool = False
+    stale_days: int | None = None
+    health_signals: list[str] = Field(default_factory=list)
+    missing_preferred_workflows: list[str] = Field(default_factory=list)
     workflows: list[str] = Field(default_factory=list)
     titles: list[str] = Field(default_factory=list)
 

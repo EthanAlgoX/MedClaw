@@ -441,6 +441,8 @@ class TestEvidenceStore:
         assert collections[0]["report_count"] == 2
         assert collections[0]["owner"] == "Translational Team"
         assert collections[0]["latest_bundle_markdown_path"].endswith("bundle_summary.md")
+        assert collections[0]["latest_run_id"] == ""
+        assert collections[0]["health_signals"] == ["no_run"]
         assert set(collections[0]["workflows"]) == {"literature_review", "evidence_brief"}
 
     def test_collection_manifest_round_trip_preserves_metadata(self, temp_workspace: Path):
@@ -761,3 +763,5 @@ class TestEvidenceStore:
         assert record.collection == "KRAS Program"
         assert record.report_count == 0
         assert record.preferred_workflows == ["literature_review"]
+        assert "empty_collection" in record.health_signals
+        assert "no_run" in record.health_signals

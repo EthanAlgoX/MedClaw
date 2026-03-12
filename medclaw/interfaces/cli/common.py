@@ -436,11 +436,14 @@ def emit_report_summary(report: ResearchReport) -> None:
 
 def emit_collection_manifest(record: CollectionRecord) -> None:
     """Render a collection manifest with aggregate report stats."""
-    latest = record.latest_generated_at.split("T", 1)[0] if record.latest_generated_at else "n/a"
+    latest = record.latest_activity_at.split("T", 1)[0] if record.latest_activity_at else "n/a"
     console.print(f"[bold]{record.collection}[/bold]")
     console.print(f"slug: {record.slug}")
     console.print(f"reports: {record.report_count}")
     console.print(f"latest: {latest}")
+    if record.stale_days is not None:
+        stale_label = "yes" if record.stale else "no"
+        console.print(f"stale: {stale_label} ({record.stale_days} days)")
     if record.owner:
         console.print(f"owner: {record.owner}")
     if record.disease_area:
@@ -451,10 +454,16 @@ def emit_collection_manifest(record: CollectionRecord) -> None:
         console.print(f"tags: {', '.join(record.tags)}")
     if record.preferred_workflows:
         console.print(f"preferred workflows: {', '.join(record.preferred_workflows)}")
+    if record.missing_preferred_workflows:
+        console.print(f"missing preferred workflows: {', '.join(record.missing_preferred_workflows)}")
     if record.workflows:
         console.print(f"active workflows: {', '.join(record.workflows)}")
     if record.latest_bundle_markdown_path:
         console.print(f"latest bundle: {record.latest_bundle_markdown_path}")
+    if record.latest_run_id:
+        console.print(f"latest run: {record.latest_run_id}")
+    if record.health_signals:
+        console.print(f"health signals: {', '.join(record.health_signals)}")
 
 
 def emit_collection_dashboard(

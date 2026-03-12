@@ -219,6 +219,13 @@ class TestApplicationResponses:
             "latest_bundle_generated_at": "",
             "latest_bundle_markdown_path": "",
             "latest_bundle_json_path": "",
+            "latest_run_id": "",
+            "latest_run_completed_at": "",
+            "latest_activity_at": "2026-03-08T09:00:00+00:00",
+            "stale": False,
+            "stale_days": 5,
+            "health_signals": ["no_run"],
+            "missing_preferred_workflows": [],
             "workflows": ["evidence_brief"],
             "titles": ["Biomarker Brief"],
             }
@@ -231,6 +238,7 @@ class TestApplicationResponses:
         assert collection_manifest.model_dump(mode="json")["item"]["slug"] == "egfr-program"
         assert collection_record.model_dump(mode="json")["item"]["report_count"] == 1
         assert collection_list.model_dump(mode="json")["items"][0]["collection"] == "EGFR Program"
+        assert collection_list.model_dump(mode="json")["items"][0]["health_signals"] == ["no_run"]
 
     def test_build_workflow_and_skill_list_responses(self):
         workflows = [WorkflowSummary(id="literature_review", title="Literature Review")]

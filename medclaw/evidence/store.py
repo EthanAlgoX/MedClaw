@@ -433,6 +433,13 @@ class EvidenceStore:
                 "latest_bundle_generated_at": "",
                 "latest_bundle_markdown_path": "",
                 "latest_bundle_json_path": "",
+                "latest_run_id": "",
+                "latest_run_completed_at": "",
+                "latest_activity_at": "",
+                "stale": False,
+                "stale_days": None,
+                "health_signals": [],
+                "missing_preferred_workflows": [],
                 "workflows": [],
                 "titles": [],
             }
@@ -460,6 +467,13 @@ class EvidenceStore:
                     "latest_bundle_generated_at": bundle_record.get("generated_at", ""),
                     "latest_bundle_markdown_path": bundle_record.get("bundle_markdown_path", ""),
                     "latest_bundle_json_path": bundle_record.get("bundle_json_path", ""),
+                    "latest_run_id": "",
+                    "latest_run_completed_at": "",
+                    "latest_activity_at": "",
+                    "stale": False,
+                    "stale_days": None,
+                    "health_signals": [],
+                    "missing_preferred_workflows": [],
                     "workflows": [],
                     "titles": [],
                 }
@@ -494,6 +508,13 @@ class EvidenceStore:
                     "latest_bundle_generated_at": "",
                     "latest_bundle_markdown_path": "",
                     "latest_bundle_json_path": "",
+                    "latest_run_id": "",
+                    "latest_run_completed_at": "",
+                    "latest_activity_at": "",
+                    "stale": False,
+                    "stale_days": None,
+                    "health_signals": [],
+                    "missing_preferred_workflows": [],
                     "workflows": [record["workflow_id"]],
                     "titles": [record["title"]],
                 }
@@ -508,11 +529,51 @@ class EvidenceStore:
                 entry["workflows"].append(record["workflow_id"])
             entry["titles"].append(record["title"])
 
+        latest_runs_by_collection: dict[str, dict[str, Any]] = {}
+        for run_record in self.list_run_records(limit=1000):
+            collection = run_record.get("collection", "").strip()
+            if not collection:
+                continue
+            key = self._slugify_collection_name(collection)
+            latest_runs_by_collection.setdefault(key, run_record)
+
+        for key, entry in collections.items():
+            latest_run_record = latest_runs_by_collection.get(key)
+            covered_workflows = list(entry["workflows"])
+            if latest_run_record is not None:
+                entry["latest_run_id"] = latest_run_record["id"]
+                entry["latest_run_completed_at"] = latest_run_record["completed_at"]
+                for workflow_id in latest_run_record["workflow_ids"]:
+                    if workflow_id not in covered_workflows:
+                        covered_workflows.append(workflow_id)
+
+            missing_preferred_workflows = [
+                workflow_id
+                for workflow_id in entry["preferred_workflows"]
+                if workflow_id not in covered_workflows
+            ]
+            latest_activity_at = self._latest_collection_activity_timestamp(
+                latest_report_at=entry["latest_generated_at"],
+                latest_bundle_at=entry["latest_bundle_generated_at"],
+                latest_run_at=entry["latest_run_completed_at"],
+            )
+            stale, stale_days = self._collection_staleness(latest_activity_at)
+            entry["latest_activity_at"] = latest_activity_at
+            entry["stale"] = stale
+            entry["stale_days"] = stale_days
+            entry["missing_preferred_workflows"] = missing_preferred_workflows
+            entry["health_signals"] = self._build_collection_health_signals(
+                report_count=entry["report_count"],
+                has_bundle=bool(entry["latest_bundle_markdown_path"]),
+                has_run=bool(entry["latest_run_id"]),
+                missing_preferred_workflows=missing_preferred_workflows,
+                stale=stale,
+            )
+
         ordered = sorted(
             collections.values(),
             key=lambda item: (
-                item["latest_generated_at"]
-                or item["latest_bundle_generated_at"]
+                item["latest_activity_at"]
                 or item["updated_at"]
                 or item["created_at"],
                 item["collection"],
@@ -549,6 +610,19 @@ class EvidenceStore:
                 "latest_bundle_generated_at": "",
                 "latest_bundle_markdown_path": "",
                 "latest_bundle_json_path": "",
+                "latest_run_id": "",
+                "latest_run_completed_at": "",
+                "latest_activity_at": "",
+                "stale": False,
+                "stale_days": None,
+                "health_signals": self._build_collection_health_signals(
+                    report_count=0,
+                    has_bundle=False,
+                    has_run=False,
+                    missing_preferred_workflows=manifest.preferred_workflows,
+                    stale=False,
+                ),
+                "missing_preferred_workflows": manifest.preferred_workflows,
                 "workflows": [],
                 "titles": [],
             }
@@ -602,18 +676,16 @@ class EvidenceStore:
             if workflow_id not in seen
         ]
 
-        latest_activity_at = self._latest_collection_activity_at(
-            collection_record=collection_record,
-            latest_report=latest_report[0] if latest_report else None,
-            latest_bundle=latest_bundle[0] if latest_bundle else None,
-            latest_run=latest_run[0] if latest_run else None,
+        latest_activity_at = self._latest_collection_activity_timestamp(
+            latest_report_at=latest_report[0].generated_at if latest_report else collection_record.latest_generated_at,
+            latest_bundle_at=latest_bundle[0].generated_at if latest_bundle else collection_record.latest_bundle_generated_at,
+            latest_run_at=latest_run[0].completed_at if latest_run else collection_record.latest_run_completed_at,
         )
         stale, stale_days = self._collection_staleness(latest_activity_at)
-        health_signals = self._collection_health_signals(
-            collection_record=collection_record,
-            latest_report=latest_report[0] if latest_report else None,
-            latest_bundle=latest_bundle[0] if latest_bundle else None,
-            latest_run=latest_run[0] if latest_run else None,
+        health_signals = self._build_collection_health_signals(
+            report_count=collection_record.report_count,
+            has_bundle=latest_bundle[0] is not None if latest_bundle else bool(collection_record.latest_bundle_markdown_path),
+            has_run=latest_run[0] is not None if latest_run else bool(collection_record.latest_run_id),
             missing_preferred_workflows=missing_preferred_workflows,
             stale=stale,
         )
@@ -1091,25 +1163,15 @@ class EvidenceStore:
             "summary_preview": "",
         }
 
-    def _latest_collection_activity_at(
+    def _latest_collection_activity_timestamp(
         self,
         *,
-        collection_record: CollectionRecord,
-        latest_report: ArtifactRecord | None,
-        latest_bundle: ArtifactRecord | None,
-        latest_run: ResearchRunRecord | None,
+        latest_report_at: str = "",
+        latest_bundle_at: str = "",
+        latest_run_at: str = "",
     ) -> str:
         """Resolve the latest observed activity timestamp for one collection."""
-        candidates = [
-            collection_record.latest_generated_at,
-            collection_record.latest_bundle_generated_at,
-        ]
-        if latest_report is not None:
-            candidates.append(latest_report.generated_at)
-        if latest_bundle is not None:
-            candidates.append(latest_bundle.generated_at)
-        if latest_run is not None:
-            candidates.append(latest_run.completed_at)
+        candidates = [latest_report_at, latest_bundle_at, latest_run_at]
         cleaned = [value for value in candidates if value]
         if not cleaned:
             return ""
@@ -1128,25 +1190,24 @@ class EvidenceStore:
         age_days = max(age_delta.days, 0)
         return age_days >= stale_after_days, age_days
 
-    def _collection_health_signals(
+    def _build_collection_health_signals(
         self,
         *,
-        collection_record: CollectionRecord,
-        latest_report: ArtifactRecord | None,
-        latest_bundle: ArtifactRecord | None,
-        latest_run: ResearchRunRecord | None,
+        report_count: int,
+        has_bundle: bool,
+        has_run: bool,
         missing_preferred_workflows: list[str],
         stale: bool,
     ) -> list[str]:
         """Build operator-friendly health signals for a collection dashboard."""
         signals: list[str] = []
-        if collection_record.report_count == 0:
+        if report_count == 0:
             signals.append("empty_collection")
-        if latest_report is None:
+        if report_count == 0:
             signals.append("no_report")
-        if latest_bundle is None:
+        if not has_bundle:
             signals.append("no_bundle")
-        if latest_run is None:
+        if not has_run:
             signals.append("no_run")
         if missing_preferred_workflows:
             signals.extend(
