@@ -61,6 +61,14 @@ research_app = typer.Typer(help="Typed medical research workflows")
 system_app = typer.Typer(help="System inspection and configuration")
 console = Console()
 SUPPORTED_PROVIDERS = ("openai", "anthropic", "openrouter", "deepseek", "google")
+RUNTIME_PROVIDER_MODELS = {
+    "openrouter": OpenRouterProvider.MODELS,
+    "deepseek": DeepSeekProvider.MODELS,
+}
+RUNTIME_PROVIDER_DEFAULT_MODELS = {
+    "openrouter": OpenRouterProvider.DEFAULT_MODEL,
+    "deepseek": DeepSeekProvider.DEFAULT_MODEL,
+}
 
 app.add_typer(research_app, name="research")
 app.add_typer(system_app, name="system")
@@ -264,6 +272,7 @@ def system_model_set(
 ):
     """Update the default model."""
     config = load_config()
+    _ensure_model_compatible_with_provider(config.agents.defaults.provider, model)
     config.agents.defaults.model = model
     save_config(config)
     _emit_config_response(config, as_json=as_json)
@@ -358,8 +367,10 @@ def system_provider_set(
     )
     setattr(config.providers, name, updated)
     if make_default:
+        _ensure_runtime_supported_provider(name)
         _ensure_provider_has_api_key(name, updated)
         config.agents.defaults.provider = name
+        _normalize_default_model_for_provider(config, name)
     save_config(config)
 
     provider = _load_provider_summary(config, name)
@@ -384,8 +395,10 @@ def system_provider_default(
     """Make a configured provider the default selection."""
     config = load_config()
     provider_config = _load_provider_config(config, name)
+    _ensure_runtime_supported_provider(name)
     _ensure_provider_has_api_key(name, provider_config)
     config.agents.defaults.provider = name
+    reset_model = _normalize_default_model_for_provider(config, name)
     save_config(config)
 
     provider = _load_provider_summary(config, name)
@@ -395,6 +408,8 @@ def system_provider_default(
 
     console.print(f"[green]Default provider set:[/green] {provider.name}")
     console.print(f"api key: {'set' if provider.has_api_key else 'missing'}")
+    if reset_model is not None:
+        console.print(f"model reset to: {reset_model}")
 
 
 @system_app.command("provider-unset")
@@ -523,6 +538,40 @@ def _ensure_provider_has_api_key(name: str, provider: ProviderConfig | None) -> 
     if provider is None or not provider.apiKey:
         console.print(f"[red]Error:[/red] Provider '{name}' must have an API key before it can become the default.")
         raise typer.Exit(1)
+
+
+def _ensure_runtime_supported_provider(name: str) -> None:
+    """Require a provider that MedClaw can instantiate at runtime."""
+    if name not in RUNTIME_PROVIDER_MODELS:
+        runtime_choices = ", ".join(sorted(RUNTIME_PROVIDER_MODELS))
+        console.print(
+            f"[red]Error:[/red] Provider '{name}' is not available as a runtime provider yet. Choose from: {runtime_choices}"
+        )
+        raise typer.Exit(1)
+
+
+def _ensure_model_compatible_with_provider(provider_name: str, model: str) -> None:
+    """Validate the model against the runtime catalog for the selected provider."""
+    supported_models = RUNTIME_PROVIDER_MODELS.get(provider_name)
+    if supported_models is None:
+        return
+    if model not in supported_models:
+        choices = ", ".join(supported_models)
+        console.print(
+            f"[red]Error:[/red] Model '{model}' is not compatible with provider '{provider_name}'. Supported models: {choices}"
+        )
+        raise typer.Exit(1)
+
+
+def _normalize_default_model_for_provider(config, provider_name: str) -> str | None:
+    """Reset the default model when switching providers across incompatible catalogs."""
+    default_model = config.agents.defaults.model
+    supported_models = RUNTIME_PROVIDER_MODELS.get(provider_name)
+    if supported_models is None or default_model in supported_models:
+        return None
+    replacement_model = RUNTIME_PROVIDER_DEFAULT_MODELS[provider_name]
+    config.agents.defaults.model = replacement_model
+    return replacement_model
 
 
 def _choose_replacement_default(config, *, removed_provider: str) -> str | None:

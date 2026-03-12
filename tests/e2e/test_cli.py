@@ -243,9 +243,10 @@ class TestCLI:
         test_home.mkdir()
         monkeypatch.setenv("HOME", str(test_home))
         workspace_path = test_home / "custom-workspace"
+        compatible_model = "openai/gpt-4o-mini"
 
         model_result = subprocess.run(
-            ["medclaw", "system", "model-set", "deepseek-chat", "--json"],
+            ["medclaw", "system", "model-set", compatible_model, "--json"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -276,7 +277,7 @@ class TestCLI:
         )
 
         assert model_result.returncode == 0
-        assert json.loads(model_result.stdout)["item"]["default_model"] == "deepseek-chat"
+        assert json.loads(model_result.stdout)["item"]["default_model"] == compatible_model
 
         assert temperature_result.returncode == 0
         assert json.loads(temperature_result.stdout)["item"]["temperature"] == 0.3
@@ -295,7 +296,7 @@ class TestCLI:
 
         config_path = test_home / ".medclaw" / "config.json"
         config_payload = json.loads(config_path.read_text(encoding="utf-8"))
-        assert config_payload["agents"]["defaults"]["model"] == "deepseek-chat"
+        assert config_payload["agents"]["defaults"]["model"] == compatible_model
         assert config_payload["agents"]["defaults"]["temperature"] == 0.3
         assert config_payload["agents"]["defaults"]["maxTokens"] == 2048
         assert config_payload["workspace"]["path"] == str(workspace_path)
@@ -324,6 +325,22 @@ class TestCLI:
 
         assert max_tokens_result.returncode == 1
         assert "Max tokens must be greater than 0" in max_tokens_result.stdout
+
+    def test_system_model_set_rejects_incompatible_model_for_default_provider(self, tmp_path, monkeypatch):
+        """Model setter should reject values outside the current provider catalog."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "system", "model-set", "deepseek-chat"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 1
+        assert "not compatible with provider 'openrouter'" in result.stdout
 
     def test_system_provider_show_and_default_commands_support_json(self, tmp_path, monkeypatch):
         """Provider show/default commands should expose typed JSON responses."""
@@ -377,6 +394,8 @@ class TestCLI:
         default_payload = json.loads(default_result.stdout)
         assert default_payload["item"]["name"] == "deepseek"
         assert default_payload["item"]["is_default"] is True
+        config_payload = json.loads((test_home / ".medclaw" / "config.json").read_text(encoding="utf-8"))
+        assert config_payload["agents"]["defaults"]["model"] == "deepseek-chat"
 
         assert show_result.returncode == 0
         show_payload = json.loads(show_result.stdout)
@@ -391,7 +410,7 @@ class TestCLI:
         monkeypatch.setenv("HOME", str(test_home))
 
         result = subprocess.run(
-            ["medclaw", "system", "provider-default", "anthropic"],
+            ["medclaw", "system", "provider-default", "deepseek"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -399,6 +418,37 @@ class TestCLI:
 
         assert result.returncode == 1
         assert "must have an API key" in result.stdout
+
+    def test_system_provider_default_rejects_non_runtime_provider(self, tmp_path, monkeypatch):
+        """Provider default command should reject providers that MedClaw cannot instantiate."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        subprocess.run(
+            [
+                "medclaw",
+                "system",
+                "provider-set",
+                "anthropic",
+                "--api-key",
+                "anthropic-key",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+
+        result = subprocess.run(
+            ["medclaw", "system", "provider-default", "anthropic"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 1
+        assert "not available as a runtime provider yet" in result.stdout
 
     def test_system_provider_unset_reassigns_default_when_possible(self, tmp_path, monkeypatch):
         """Provider unset should switch the default to another configured provider."""
