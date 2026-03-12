@@ -257,6 +257,7 @@ class TestArtifactApiModels:
         filters = CollectionDashboardQueryFilters(
             only_unhealthy=True,
             sort_by="health",
+            top=3,
             limit=5,
             timeline_limit=3,
         )
@@ -289,3 +290,4 @@ class TestArtifactApiModels:
         assert response.model_dump(mode="json")["items"][0]["collection"]["slug"] == "dormant-program"
         assert response.model_dump(mode="json")["filters"]["only_unhealthy"] is True
         assert response.model_dump(mode="json")["filters"]["sort_by"] == "health"
+        assert response.model_dump(mode="json")["filters"]["top"] == 3

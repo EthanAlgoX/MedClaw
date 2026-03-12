@@ -927,6 +927,71 @@ class TestCLI:
         assert "Gap Program" in text_result.stdout
         assert "missing preferred: evidence_brief" in text_result.stdout
 
+    def test_research_dashboards_command_supports_top_summary_and_export(self, tmp_path, monkeypatch):
+        """Research dashboards should support top-N summary output and JSON export."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        export_path = tmp_path / "dashboard-export.json"
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="Gap Program",
+            objective="Track workflow coverage",
+            preferred_workflows=["evidence_brief"],
+        )
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Track stale activity",
+            preferred_workflows=["literature_review"],
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Coverage Review",
+            question="Coverage topic",
+            summary="Summary",
+            generated_at="2026-03-08T09:00:00+00:00",
+            collection="Gap Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Legacy Review",
+            question="Legacy topic",
+            summary="Summary",
+            generated_at="2025-01-01T09:00:00+00:00",
+            collection="Dormant Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "dashboards",
+                "--sort-by",
+                "health",
+                "--top",
+                "1",
+                "--summary-only",
+                "--export-json-path",
+                str(export_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        assert "dashboard export:" in result.stdout
+        assert "Dormant Program" in result.stdout
+        assert "latest run:" not in result.stdout
+        assert export_path.exists()
+
+        export_payload = json.loads(export_path.read_text(encoding="utf-8"))
+        assert export_payload["total"] == 1
+        assert export_payload["items"][0]["collection"]["collection"] == "Dormant Program"
+        assert export_payload["filters"]["top"] == 1
+
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
         """Research runs command should expose typed saved run records."""
         test_home = tmp_path / "test_home"

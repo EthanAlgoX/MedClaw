@@ -300,6 +300,7 @@ def build_collection_dashboard_query_filters(
     only_unhealthy: bool = False,
     missing_workflow: str | None = None,
     sort_by: str = "activity",
+    top: int | None = None,
     limit: int = 50,
     timeline_limit: int = 10,
 ) -> CollectionDashboardQueryFilters:
@@ -309,6 +310,7 @@ def build_collection_dashboard_query_filters(
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
         sort_by=sort_by,
+        top=top,
         limit=limit,
         timeline_limit=timeline_limit,
     )

@@ -317,6 +317,16 @@ def write_json(payload) -> None:
     sys.stdout.write("\n")
 
 
+def save_json(payload, path: str | Path) -> Path:
+    """Persist a machine-readable JSON payload to disk."""
+    if isinstance(payload, BaseModel):
+        payload = payload.model_dump(mode="json")
+    target_path = Path(path).expanduser()
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return target_path
+
+
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
     """Render a single artifact record into user-facing output."""
     if isinstance(record, CollectionBundleArtifactRecord):
@@ -516,6 +526,7 @@ def emit_collection_dashboard_list(
     dashboards: list[CollectionDashboard],
     *,
     sort_by: str = "activity",
+    summary_only: bool = False,
 ) -> None:
     """Render a compact multi-collection dashboard view."""
     if not dashboards:
@@ -534,6 +545,10 @@ def emit_collection_dashboard_list(
             f"{record.collection} latest={latest} status={status} "
             f"reports={record.report_count} workflows={len(dashboard.covered_workflows)}"
         )
+        if summary_only:
+            if dashboard.health_signals:
+                console.print(f"      health: {', '.join(dashboard.health_signals)}")
+            continue
         if dashboard.latest_run is not None:
             console.print(f"      latest run: {dashboard.latest_run.id}")
         if dashboard.latest_report is not None:

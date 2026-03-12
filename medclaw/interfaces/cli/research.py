@@ -50,6 +50,7 @@ from medclaw.interfaces.cli.common import (
     normalize_artifact_option,
     read_show_artifact,
     run_research_workflow_report,
+    save_json,
     write_json,
     write_lines,
 )
@@ -522,17 +523,35 @@ def research_dashboards(
         "--sort-by",
         help="Sort by activity, health, coverage, or name.",
     ),
+    top: int | None = typer.Option(
+        None,
+        "--top",
+        min=1,
+        help="Show only the top N collections after sorting.",
+    ),
+    summary_only: bool = typer.Option(
+        False,
+        "--summary-only",
+        help="Render a compact summary view in text mode.",
+    ),
+    export_json_path: str | None = typer.Option(
+        None,
+        "--export-json-path",
+        help="Persist the typed dashboard list response to a JSON file.",
+    ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
     timeline_limit: int = typer.Option(5, "--timeline-limit", min=1, help="Maximum timeline events per collection."),
 ):
     """List collection dashboards for triage-oriented operations."""
     store = get_evidence_store()
+    fetch_limit = max(limit, top or 0)
     filters = build_collection_dashboard_query_filters(
         only_stale=only_stale,
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
         sort_by=sort_by,
+        top=top,
         limit=limit,
         timeline_limit=timeline_limit,
     )
@@ -541,15 +560,23 @@ def research_dashboards(
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
         sort_by=sort_by,
-        limit=limit,
+        limit=fetch_limit,
         timeline_limit=timeline_limit,
     )
+    if top is not None:
+        dashboards = dashboards[:top]
+    response = build_collection_dashboard_list_response(dashboards, filters)
+
+    if export_json_path:
+        saved_path = save_json(response, export_json_path)
+        if not as_json:
+            console.print(f"dashboard export: {saved_path}")
 
     if as_json:
-        write_json(build_collection_dashboard_list_response(dashboards, filters))
+        write_json(response)
         return
 
-    emit_collection_dashboard_list(dashboards, sort_by=sort_by)
+    emit_collection_dashboard_list(dashboards, sort_by=sort_by, summary_only=summary_only)
 
 
 @research_app.command("runs")
