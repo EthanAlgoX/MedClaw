@@ -377,10 +377,30 @@ def research_collections(
         "--only-unhealthy",
         help="Only include collections with health signals.",
     ),
+    only_missing_bundle: bool = typer.Option(
+        False,
+        "--only-missing-bundle",
+        help="Only include collections without a saved bundle.",
+    ),
+    only_missing_run: bool = typer.Option(
+        False,
+        "--only-missing-run",
+        help="Only include collections without a saved run.",
+    ),
     missing_workflow: str | None = typer.Option(
         None,
         "--missing-workflow",
         help="Only include collections missing a preferred workflow.",
+    ),
+    owner: str | None = typer.Option(
+        None,
+        "--owner",
+        help="Only include collections owned by the given team or user.",
+    ),
+    disease_area: str | None = typer.Option(
+        None,
+        "--disease-area",
+        help="Only include collections for the given disease area.",
     ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
@@ -391,7 +411,11 @@ def research_collections(
         only_stale=only_stale,
         stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,
+        only_missing_bundle=only_missing_bundle,
+        only_missing_run=only_missing_run,
         missing_workflow=missing_workflow,
+        owner=owner,
+        disease_area=disease_area,
         limit=limit,
     )
     if as_json:
@@ -409,8 +433,16 @@ def research_collections(
         filter_suffix.append(f"stale_days_min={stale_days_min}")
     if only_unhealthy:
         filter_suffix.append("only_unhealthy")
+    if only_missing_bundle:
+        filter_suffix.append("only_missing_bundle")
+    if only_missing_run:
+        filter_suffix.append("only_missing_run")
     if missing_workflow:
         filter_suffix.append(f"missing_workflow={missing_workflow}")
+    if owner:
+        filter_suffix.append(f"owner={owner}")
+    if disease_area:
+        filter_suffix.append(f"disease_area={disease_area}")
     suffix = f" ({', '.join(filter_suffix)})" if filter_suffix else ""
 
     console.print(f"[bold]Research Collections{suffix}:[/bold]")

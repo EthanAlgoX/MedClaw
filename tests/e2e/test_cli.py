@@ -2010,16 +2010,22 @@ class TestCLI:
         store.save_collection_manifest(
             name="Dormant Program",
             objective="Track stale activity",
+            owner="Translational Team",
+            disease_area="Oncology",
             preferred_workflows=["literature_review"],
         )
         store.save_collection_manifest(
             name="Gap Program",
             objective="Track workflow coverage",
+            owner="Biomarker Team",
+            disease_area="Thoracic oncology",
             preferred_workflows=["evidence_brief"],
         )
         store.save_collection_manifest(
             name="Healthy Program",
             objective="Track active execution",
+            owner="Translational Team",
+            disease_area="Oncology",
             preferred_workflows=["literature_review"],
         )
         self._seed_report_with_fields(
@@ -2077,6 +2083,36 @@ class TestCLI:
             text=True,
             timeout=10,
         )
+        owner_bundle_result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "collections",
+                "--owner",
+                "Translational Team",
+                "--disease-area",
+                "Oncology",
+                "--only-missing-bundle",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        owner_run_result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "collections",
+                "--owner",
+                "Biomarker Team",
+                "--only-missing-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
 
         assert stale_result.returncode == 0
         stale_payload = json.loads(stale_result.stdout)
@@ -2093,6 +2129,17 @@ class TestCLI:
         assert missing_result.returncode == 0
         missing_payload = json.loads(missing_result.stdout)
         assert [item["collection"] for item in missing_payload["items"]] == ["Gap Program"]
+
+        assert owner_bundle_result.returncode == 0
+        owner_bundle_payload = json.loads(owner_bundle_result.stdout)
+        assert {item["collection"] for item in owner_bundle_payload["items"]} == {
+            "Dormant Program",
+            "Healthy Program",
+        }
+
+        assert owner_run_result.returncode == 0
+        owner_run_payload = json.loads(owner_run_result.stdout)
+        assert [item["collection"] for item in owner_run_payload["items"]] == ["Gap Program"]
 
     def test_research_collection_set_and_show_commands_manage_manifest(self, tmp_path, monkeypatch):
         """Research collection manifest commands should create and retrieve project metadata."""
