@@ -602,6 +602,22 @@ class EvidenceStore:
             if workflow_id not in seen
         ]
 
+        latest_activity_at = self._latest_collection_activity_at(
+            collection_record=collection_record,
+            latest_report=latest_report[0] if latest_report else None,
+            latest_bundle=latest_bundle[0] if latest_bundle else None,
+            latest_run=latest_run[0] if latest_run else None,
+        )
+        stale, stale_days = self._collection_staleness(latest_activity_at)
+        health_signals = self._collection_health_signals(
+            collection_record=collection_record,
+            latest_report=latest_report[0] if latest_report else None,
+            latest_bundle=latest_bundle[0] if latest_bundle else None,
+            latest_run=latest_run[0] if latest_run else None,
+            missing_preferred_workflows=missing_preferred_workflows,
+            stale=stale,
+        )
+
         return CollectionDashboard(
             collection=collection_record,
             latest_report=latest_report[0] if latest_report else None,
@@ -610,6 +626,10 @@ class EvidenceStore:
             timeline=timeline,
             covered_workflows=covered_workflows,
             missing_preferred_workflows=missing_preferred_workflows,
+            latest_activity_at=latest_activity_at,
+            stale=stale,
+            stale_days=stale_days,
+            health_signals=health_signals,
         )
 
     def save_collection_bundle_artifacts(
@@ -1070,6 +1090,72 @@ class EvidenceStore:
             "scope": record.get("scope", ""),
             "summary_preview": "",
         }
+
+    def _latest_collection_activity_at(
+        self,
+        *,
+        collection_record: CollectionRecord,
+        latest_report: ArtifactRecord | None,
+        latest_bundle: ArtifactRecord | None,
+        latest_run: ResearchRunRecord | None,
+    ) -> str:
+        """Resolve the latest observed activity timestamp for one collection."""
+        candidates = [
+            collection_record.latest_generated_at,
+            collection_record.latest_bundle_generated_at,
+        ]
+        if latest_report is not None:
+            candidates.append(latest_report.generated_at)
+        if latest_bundle is not None:
+            candidates.append(latest_bundle.generated_at)
+        if latest_run is not None:
+            candidates.append(latest_run.completed_at)
+        cleaned = [value for value in candidates if value]
+        if not cleaned:
+            return ""
+        return max(cleaned)
+
+    def _collection_staleness(
+        self,
+        latest_activity_at: str,
+        *,
+        stale_after_days: int = 30,
+    ) -> tuple[bool, int | None]:
+        """Determine whether a collection appears stale."""
+        if not latest_activity_at:
+            return False, None
+        age_delta = datetime.now(timezone.utc) - self._parse_generated_at(latest_activity_at)
+        age_days = max(age_delta.days, 0)
+        return age_days >= stale_after_days, age_days
+
+    def _collection_health_signals(
+        self,
+        *,
+        collection_record: CollectionRecord,
+        latest_report: ArtifactRecord | None,
+        latest_bundle: ArtifactRecord | None,
+        latest_run: ResearchRunRecord | None,
+        missing_preferred_workflows: list[str],
+        stale: bool,
+    ) -> list[str]:
+        """Build operator-friendly health signals for a collection dashboard."""
+        signals: list[str] = []
+        if collection_record.report_count == 0:
+            signals.append("empty_collection")
+        if latest_report is None:
+            signals.append("no_report")
+        if latest_bundle is None:
+            signals.append("no_bundle")
+        if latest_run is None:
+            signals.append("no_run")
+        if missing_preferred_workflows:
+            signals.extend(
+                f"missing_preferred_workflow:{workflow_id}"
+                for workflow_id in missing_preferred_workflows
+            )
+        if stale:
+            signals.append("stale_collection")
+        return signals
 
     def _collection_bundle_payload(
         self,

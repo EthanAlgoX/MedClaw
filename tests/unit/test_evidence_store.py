@@ -240,7 +240,40 @@ class TestEvidenceStore:
         assert dashboard.latest_run.id == "run-123"
         assert dashboard.covered_workflows == ["literature_review", "study_design"]
         assert dashboard.missing_preferred_workflows == ["evidence_brief"]
+        assert dashboard.latest_activity_at
+        assert dashboard.stale is False
+        assert dashboard.health_signals == ["missing_preferred_workflow:evidence_brief"]
         assert len(dashboard.timeline) == 3
+
+    def test_get_collection_dashboard_model_marks_stale_and_missing_assets(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Monitor a paused research topic",
+            preferred_workflows=["literature_review"],
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Legacy topic",
+                title="Legacy Review",
+                summary="Summary",
+                generated_at="2025-01-01T09:00:00+00:00",
+                metadata={"collection": "Dormant Program"},
+            )
+        )
+
+        dashboard = store.get_collection_dashboard_model("Dormant Program", timeline_limit=2)
+
+        assert dashboard.latest_report is not None
+        assert dashboard.latest_bundle is None
+        assert dashboard.latest_run is None
+        assert dashboard.stale is True
+        assert dashboard.stale_days is not None
+        assert dashboard.stale_days >= 30
+        assert "no_bundle" in dashboard.health_signals
+        assert "no_run" in dashboard.health_signals
+        assert "stale_collection" in dashboard.health_signals
 
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)

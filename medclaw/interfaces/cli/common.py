@@ -472,6 +472,12 @@ def emit_collection_dashboard(
     console.print(f"slug: {record.slug}")
     console.print(f"reports: {record.report_count}")
     console.print(f"workflows covered: {', '.join(dashboard.covered_workflows) or 'n/a'}")
+    if dashboard.latest_activity_at:
+        console.print(f"latest activity: {dashboard.latest_activity_at.split('T', 1)[0]}")
+    if dashboard.stale:
+        console.print(f"stale: yes ({dashboard.stale_days} days)")
+    elif dashboard.stale_days is not None:
+        console.print(f"stale: no ({dashboard.stale_days} days)")
     if record.objective:
         console.print(f"objective: {record.objective}")
     if record.owner:
@@ -482,6 +488,8 @@ def emit_collection_dashboard(
         console.print(
             f"missing preferred workflows: {', '.join(dashboard.missing_preferred_workflows)}"
         )
+    if dashboard.health_signals:
+        console.print(f"health signals: {', '.join(dashboard.health_signals)}")
     if dashboard.latest_report is not None:
         console.print(f"latest report: {dashboard.latest_report.title}")
     if dashboard.latest_bundle is not None:

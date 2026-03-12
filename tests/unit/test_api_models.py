@@ -232,7 +232,14 @@ class TestArtifactApiModels:
                 "timeline": [],
                 "covered_workflows": ["literature_review"],
                 "missing_preferred_workflows": ["evidence_brief"],
+                "latest_activity_at": "2026-03-08T09:00:00+00:00",
+                "stale": False,
+                "stale_days": 5,
+                "health_signals": ["missing_preferred_workflow:evidence_brief"],
             }
         )
 
         assert response.model_dump(mode="json")["item"]["collection"]["slug"] == "kras-program"
+        assert response.model_dump(mode="json")["item"]["health_signals"] == [
+            "missing_preferred_workflow:evidence_brief"
+        ]

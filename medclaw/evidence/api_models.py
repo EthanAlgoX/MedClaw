@@ -256,6 +256,10 @@ class CollectionDashboard(BaseModel):
     timeline: list[ResearchTimelineRecord] = Field(default_factory=list)
     covered_workflows: list[str] = Field(default_factory=list)
     missing_preferred_workflows: list[str] = Field(default_factory=list)
+    latest_activity_at: str = ""
+    stale: bool = False
+    stale_days: int | None = None
+    health_signals: list[str] = Field(default_factory=list)
 
 
 class CollectionDashboardResponse(BaseModel):

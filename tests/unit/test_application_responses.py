@@ -135,11 +135,16 @@ class TestApplicationResponses:
             ),
             covered_workflows=["literature_review"],
             missing_preferred_workflows=["evidence_brief"],
+            latest_activity_at="2026-03-08T09:00:00+00:00",
+            stale=False,
+            stale_days=5,
+            health_signals=["missing_preferred_workflow:evidence_brief"],
         )
 
         response = build_collection_dashboard_response(dashboard)
 
         assert response.model_dump(mode="json")["item"]["collection"]["collection"] == "KRAS Program"
+        assert response.model_dump(mode="json")["item"]["stale"] is False
 
     def test_build_artifact_responses(self):
         filters = build_artifact_query_filters(kind="report", latest=True, limit=1)

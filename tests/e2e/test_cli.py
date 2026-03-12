@@ -790,11 +790,57 @@ class TestCLI:
         assert payload["item"]["latest_bundle"]["kind"] == "collection_bundle"
         assert payload["item"]["latest_run"]["id"] == "run-001"
         assert payload["item"]["missing_preferred_workflows"] == ["evidence_brief"]
+        assert payload["item"]["health_signals"] == ["missing_preferred_workflow:evidence_brief"]
 
         assert text_result.returncode == 0
         assert "KRAS Program" in text_result.stdout
         assert "latest report: KRAS Review" in text_result.stdout
         assert "latest run: run-001" in text_result.stdout
+
+    def test_research_dashboard_command_surfaces_stale_collection_health(self, tmp_path, monkeypatch):
+        """Research dashboard should expose stale and missing-asset health signals."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Monitor a paused research topic",
+            preferred_workflows=["literature_review"],
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Legacy Review",
+            question="Legacy topic",
+            summary="Summary",
+            generated_at="2025-01-01T09:00:00+00:00",
+            collection="Dormant Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "dashboard", "Dormant Program", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        text_result = subprocess.run(
+            ["medclaw", "research", "dashboard", "Dormant Program"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["item"]["stale"] is True
+        assert "no_bundle" in payload["item"]["health_signals"]
+        assert "no_run" in payload["item"]["health_signals"]
+        assert "stale_collection" in payload["item"]["health_signals"]
+
+        assert text_result.returncode == 0
+        assert "stale: yes" in text_result.stdout
+        assert "health signals:" in text_result.stdout
 
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
         """Research runs command should expose typed saved run records."""
