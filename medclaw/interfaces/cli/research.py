@@ -402,6 +402,11 @@ def research_collections(
         "--disease-area",
         help="Only include collections for the given disease area.",
     ),
+    sort_by: Literal["activity", "health", "coverage", "name"] = typer.Option(
+        "activity",
+        "--sort-by",
+        help="Sort by activity, health, coverage, or name.",
+    ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
 ):
@@ -416,6 +421,7 @@ def research_collections(
         missing_workflow=missing_workflow,
         owner=owner,
         disease_area=disease_area,
+        sort_by=sort_by,
         limit=limit,
     )
     if as_json:
@@ -443,6 +449,8 @@ def research_collections(
         filter_suffix.append(f"owner={owner}")
     if disease_area:
         filter_suffix.append(f"disease_area={disease_area}")
+    if sort_by != "activity":
+        filter_suffix.append(f"sort_by={sort_by}")
     suffix = f" ({', '.join(filter_suffix)})" if filter_suffix else ""
 
     console.print(f"[bold]Research Collections{suffix}:[/bold]")

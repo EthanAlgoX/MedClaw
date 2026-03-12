@@ -593,6 +593,7 @@ class EvidenceStore:
         missing_workflow: str | None = None,
         owner: str | None = None,
         disease_area: str | None = None,
+        sort_by: str = "activity",
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Filter collection aggregate records by health-oriented triage criteria."""
@@ -623,9 +624,8 @@ class EvidenceStore:
             if normalized_disease_area and record["disease_area"].strip().lower() != normalized_disease_area:
                 continue
             filtered.append(record)
-            if len(filtered) >= limit:
-                break
-        return filtered
+        filtered = self._sort_collection_records(filtered, sort_by=sort_by)
+        return filtered[:limit]
 
     def list_collection_record_models(self, limit: int = 50) -> list[CollectionRecord]:
         """Aggregate saved reports by collection as typed models."""
@@ -642,6 +642,7 @@ class EvidenceStore:
         missing_workflow: str | None = None,
         owner: str | None = None,
         disease_area: str | None = None,
+        sort_by: str = "activity",
         limit: int = 50,
     ) -> list[CollectionRecord]:
         """Filter collection aggregate records as typed models."""
@@ -655,6 +656,7 @@ class EvidenceStore:
                 missing_workflow=missing_workflow,
                 owner=owner,
                 disease_area=disease_area,
+                sort_by=sort_by,
                 limit=limit,
             )
         )
@@ -1319,6 +1321,53 @@ class EvidenceStore:
                 key=lambda dashboard: dashboard.collection.collection.lower(),
             )
         raise ValueError(f"Unsupported collection dashboard sort: {sort_by}")
+
+    def _sort_collection_records(
+        self,
+        records: list[dict[str, Any]],
+        *,
+        sort_by: str,
+    ) -> list[dict[str, Any]]:
+        """Sort collection registry records using the same operator-facing semantics as dashboards."""
+        if sort_by == "activity":
+            return sorted(
+                records,
+                key=lambda record: (
+                    record["latest_activity_at"],
+                    record["collection"].lower(),
+                ),
+                reverse=True,
+            )
+        if sort_by == "health":
+            return sorted(
+                records,
+                key=lambda record: (
+                    len(record["health_signals"]),
+                    int(record["stale"]),
+                    len(record["missing_preferred_workflows"]),
+                    record["latest_activity_at"],
+                    record["collection"].lower(),
+                ),
+                reverse=True,
+            )
+        if sort_by == "coverage":
+            return sorted(
+                records,
+                key=lambda record: (
+                    len(record["missing_preferred_workflows"]),
+                    -len(record["workflows"]),
+                    len(record["health_signals"]),
+                    record["latest_activity_at"],
+                    record["collection"].lower(),
+                ),
+                reverse=True,
+            )
+        if sort_by == "name":
+            return sorted(
+                records,
+                key=lambda record: record["collection"].lower(),
+            )
+        raise ValueError(f"Unsupported collection record sort: {sort_by}")
 
     def _group_collection_dashboards(
         self,
