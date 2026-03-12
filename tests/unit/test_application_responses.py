@@ -169,6 +169,7 @@ class TestApplicationResponses:
         filters = build_collection_dashboard_query_filters(
             only_stale=True,
             only_unhealthy=True,
+            group_by="owner",
             sort_by="health",
             top=2,
             limit=5,
@@ -177,7 +178,9 @@ class TestApplicationResponses:
         response = build_collection_dashboard_list_response([dashboard], filters)
 
         assert response.model_dump(mode="json")["items"][0]["collection"]["collection"] == "Dormant Program"
+        assert response.model_dump(mode="json")["summary"]["stale"] == 1
         assert response.model_dump(mode="json")["filters"]["only_stale"] is True
+        assert response.model_dump(mode="json")["filters"]["group_by"] == "owner"
         assert response.model_dump(mode="json")["filters"]["sort_by"] == "health"
         assert response.model_dump(mode="json")["filters"]["top"] == 2
 

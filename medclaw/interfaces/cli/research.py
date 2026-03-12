@@ -58,6 +58,16 @@ from medclaw.interfaces.cli.common import (
 research_app = typer.Typer(help="Typed medical research workflows")
 
 
+def normalize_dashboard_group_by(group_by: str | None) -> str | None:
+    """Normalize dashboard grouping options across CLI/text/API layers."""
+    if group_by is None:
+        return None
+    normalized = group_by.strip().lower().replace("-", "_")
+    if normalized not in {"owner", "disease_area"}:
+        raise ValueError("Unsupported group_by value. Choose from: owner, disease-area")
+    return normalized
+
+
 @research_app.command("workflows")
 def research_workflows(
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
@@ -523,6 +533,11 @@ def research_dashboards(
         "--sort-by",
         help="Sort by activity, health, coverage, or name.",
     ),
+    group_by: str | None = typer.Option(
+        None,
+        "--group-by",
+        help="Group by owner or disease-area.",
+    ),
     top: int | None = typer.Option(
         None,
         "--top",
@@ -545,12 +560,18 @@ def research_dashboards(
 ):
     """List collection dashboards for triage-oriented operations."""
     store = get_evidence_store()
+    try:
+        normalized_group_by = normalize_dashboard_group_by(group_by)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
     fetch_limit = max(limit, top or 0)
     filters = build_collection_dashboard_query_filters(
         only_stale=only_stale,
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
         sort_by=sort_by,
+        group_by=normalized_group_by,
         top=top,
         limit=limit,
         timeline_limit=timeline_limit,
@@ -560,6 +581,7 @@ def research_dashboards(
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
         sort_by=sort_by,
+        group_by=normalized_group_by,
         limit=fetch_limit,
         timeline_limit=timeline_limit,
     )
@@ -576,7 +598,13 @@ def research_dashboards(
         write_json(response)
         return
 
-    emit_collection_dashboard_list(dashboards, sort_by=sort_by, summary_only=summary_only)
+    emit_collection_dashboard_list(
+        dashboards,
+        sort_by=sort_by,
+        summary_only=summary_only,
+        group_by=normalized_group_by,
+        summary=response.summary,
+    )
 
 
 @research_app.command("runs")

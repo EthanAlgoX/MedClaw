@@ -936,11 +936,13 @@ class TestCLI:
         store.save_collection_manifest(
             name="Gap Program",
             objective="Track workflow coverage",
+            owner="Biomarker Team",
             preferred_workflows=["evidence_brief"],
         )
         store.save_collection_manifest(
             name="Dormant Program",
             objective="Track stale activity",
+            owner="Translational Team",
             preferred_workflows=["literature_review"],
         )
         self._seed_report_with_fields(
@@ -970,6 +972,8 @@ class TestCLI:
                 "dashboards",
                 "--sort-by",
                 "health",
+                "--group-by",
+                "owner",
                 "--top",
                 "1",
                 "--summary-only",
@@ -983,6 +987,9 @@ class TestCLI:
 
         assert result.returncode == 0
         assert "dashboard export:" in result.stdout
+        assert "total=1 stale=1 unhealthy=1" in result.stdout
+        assert "grouped by owner:" in result.stdout
+        assert "Translational Team" in result.stdout
         assert "Dormant Program" in result.stdout
         assert "latest run:" not in result.stdout
         assert export_path.exists()
@@ -990,6 +997,9 @@ class TestCLI:
         export_payload = json.loads(export_path.read_text(encoding="utf-8"))
         assert export_payload["total"] == 1
         assert export_payload["items"][0]["collection"]["collection"] == "Dormant Program"
+        assert export_payload["summary"]["grouped_by"] == "owner"
+        assert export_payload["summary"]["groups"][0]["label"] == "Translational Team"
+        assert export_payload["filters"]["group_by"] == "owner"
         assert export_payload["filters"]["top"] == 1
 
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):

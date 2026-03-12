@@ -256,6 +256,7 @@ class TestArtifactApiModels:
     def test_collection_dashboard_list_response_models_dump_envelopes(self):
         filters = CollectionDashboardQueryFilters(
             only_unhealthy=True,
+            group_by="owner",
             sort_by="health",
             top=3,
             limit=5,
@@ -284,10 +285,24 @@ class TestArtifactApiModels:
                 }
             ],
             total=1,
+            summary={
+                "total": 1,
+                "stale": 1,
+                "unhealthy": 1,
+                "missing_preferred": 0,
+                "with_bundle": 0,
+                "with_run": 0,
+                "grouped_by": "owner",
+                "groups": [
+                    {"key": "unspecified", "label": "Unspecified", "total": 1, "stale": 1, "unhealthy": 1}
+                ],
+            },
             filters=filters,
         )
 
         assert response.model_dump(mode="json")["items"][0]["collection"]["slug"] == "dormant-program"
+        assert response.model_dump(mode="json")["summary"]["grouped_by"] == "owner"
         assert response.model_dump(mode="json")["filters"]["only_unhealthy"] is True
+        assert response.model_dump(mode="json")["filters"]["group_by"] == "owner"
         assert response.model_dump(mode="json")["filters"]["sort_by"] == "health"
         assert response.model_dump(mode="json")["filters"]["top"] == 3

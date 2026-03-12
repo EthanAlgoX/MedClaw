@@ -26,6 +26,8 @@ from medclaw.evidence.api_models import (
     CollectionRecord,
     CollectionResponse,
     CollectionDashboard,
+    CollectionDashboardAggregateSummary,
+    CollectionDashboardGroupSummary,
     CollectionDashboardResponse,
     CollectionDashboardListResponse,
     CollectionDashboardQueryFilters,
@@ -300,6 +302,7 @@ def build_collection_dashboard_query_filters(
     only_unhealthy: bool = False,
     missing_workflow: str | None = None,
     sort_by: str = "activity",
+    group_by: str | None = None,
     top: int | None = None,
     limit: int = 50,
     timeline_limit: int = 10,
@@ -310,6 +313,7 @@ def build_collection_dashboard_query_filters(
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
         sort_by=sort_by,
+        group_by=group_by,
         top=top,
         limit=limit,
         timeline_limit=timeline_limit,
@@ -321,7 +325,71 @@ def build_collection_dashboard_list_response(
     filters: CollectionDashboardQueryFilters,
 ) -> CollectionDashboardListResponse:
     """Build a typed collection dashboard list response."""
-    return CollectionDashboardListResponse(items=dashboards, total=len(dashboards), filters=filters)
+    return CollectionDashboardListResponse(
+        items=dashboards,
+        total=len(dashboards),
+        summary=build_collection_dashboard_aggregate_summary(dashboards, group_by=filters.group_by),
+        filters=filters,
+    )
+
+
+def build_collection_dashboard_aggregate_summary(
+    dashboards: list[CollectionDashboard],
+    *,
+    group_by: str | None = None,
+) -> CollectionDashboardAggregateSummary:
+    """Build an aggregate summary for dashboard list views."""
+    groups: dict[str, CollectionDashboardGroupSummary] = {}
+    stale = 0
+    unhealthy = 0
+    missing_preferred = 0
+    with_bundle = 0
+    with_run = 0
+
+    for dashboard in dashboards:
+        if dashboard.stale:
+            stale += 1
+        if dashboard.health_signals:
+            unhealthy += 1
+        if dashboard.missing_preferred_workflows:
+            missing_preferred += 1
+        if dashboard.latest_bundle is not None:
+            with_bundle += 1
+        if dashboard.latest_run is not None:
+            with_run += 1
+
+        if group_by:
+            if group_by == "owner":
+                raw_label = dashboard.collection.owner.strip()
+            else:
+                raw_label = dashboard.collection.disease_area.strip()
+            label = raw_label or "Unspecified"
+            key = label.lower()
+            group = groups.setdefault(
+                key,
+                CollectionDashboardGroupSummary(key=key, label=label, total=0, stale=0, unhealthy=0),
+            )
+            group.total += 1
+            if dashboard.stale:
+                group.stale += 1
+            if dashboard.health_signals:
+                group.unhealthy += 1
+
+    ordered_groups = sorted(
+        groups.values(),
+        key=lambda group: (group.total, group.unhealthy, group.label.lower()),
+        reverse=True,
+    )
+    return CollectionDashboardAggregateSummary(
+        total=len(dashboards),
+        stale=stale,
+        unhealthy=unhealthy,
+        missing_preferred=missing_preferred,
+        with_bundle=with_bundle,
+        with_run=with_run,
+        grouped_by=group_by,
+        groups=ordered_groups,
+    )
 
 
 def build_workflow_summary(record: dict[str, str]) -> WorkflowSummary:

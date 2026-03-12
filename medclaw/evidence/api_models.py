@@ -282,9 +282,33 @@ class CollectionDashboardQueryFilters(BaseModel):
     only_unhealthy: bool = False
     missing_workflow: str | None = None
     sort_by: Literal["activity", "health", "coverage", "name"] = "activity"
+    group_by: Literal["owner", "disease_area"] | None = None
     top: int | None = None
     limit: int = 50
     timeline_limit: int = 10
+
+
+class CollectionDashboardGroupSummary(BaseModel):
+    """One grouped rollup inside the dashboard list response."""
+
+    key: str
+    label: str
+    total: int
+    stale: int = 0
+    unhealthy: int = 0
+
+
+class CollectionDashboardAggregateSummary(BaseModel):
+    """Aggregate dashboard list summary for project inventory views."""
+
+    total: int
+    stale: int = 0
+    unhealthy: int = 0
+    missing_preferred: int = 0
+    with_bundle: int = 0
+    with_run: int = 0
+    grouped_by: Literal["owner", "disease_area"] | None = None
+    groups: list[CollectionDashboardGroupSummary] = Field(default_factory=list)
 
 
 class CollectionDashboardListResponse(BaseModel):
@@ -292,6 +316,7 @@ class CollectionDashboardListResponse(BaseModel):
 
     items: list[CollectionDashboard]
     total: int
+    summary: CollectionDashboardAggregateSummary
     filters: CollectionDashboardQueryFilters
 
 

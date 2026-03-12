@@ -325,16 +325,19 @@ class TestEvidenceStore:
         store.save_collection_manifest(
             name="Stable Program",
             objective="Healthy active project",
+            owner="Alpha Team",
             preferred_workflows=["literature_review"],
         )
         store.save_collection_manifest(
             name="Gap Program",
             objective="Missing preferred workflow",
+            owner="Beta Team",
             preferred_workflows=["evidence_brief"],
         )
         store.save_collection_manifest(
             name="Dormant Program",
             objective="Stale inactive project",
+            owner="Alpha Team",
             preferred_workflows=["literature_review"],
         )
 
@@ -396,6 +399,12 @@ class TestEvidenceStore:
         health_sorted = store.list_collection_dashboard_models(sort_by="health", limit=10, timeline_limit=1)
         coverage_sorted = store.list_collection_dashboard_models(sort_by="coverage", limit=10, timeline_limit=1)
         name_sorted = store.list_collection_dashboard_models(sort_by="name", limit=10, timeline_limit=1)
+        grouped = store.list_collection_dashboard_models(
+            sort_by="health",
+            group_by="owner",
+            limit=10,
+            timeline_limit=1,
+        )
 
         assert [dashboard.collection.collection for dashboard in health_sorted[:2]] == [
             "Dormant Program",
@@ -406,6 +415,11 @@ class TestEvidenceStore:
             "Dormant Program",
             "Gap Program",
             "Stable Program",
+        ]
+        assert [dashboard.collection.collection for dashboard in grouped] == [
+            "Dormant Program",
+            "Stable Program",
+            "Gap Program",
         ]
 
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):

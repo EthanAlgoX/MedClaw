@@ -35,6 +35,7 @@ from medclaw.config.schema import ProviderConfig
 from medclaw.evidence.api_models import (
     ArtifactRecord,
     CollectionDashboard,
+    CollectionDashboardAggregateSummary,
     CollectionBundleArtifactRecord,
     CollectionRecord,
     ResearchRunRecord,
@@ -527,15 +528,43 @@ def emit_collection_dashboard_list(
     *,
     sort_by: str = "activity",
     summary_only: bool = False,
+    group_by: str | None = None,
+    summary: CollectionDashboardAggregateSummary | None = None,
 ) -> None:
     """Render a compact multi-collection dashboard view."""
     if not dashboards:
         console.print("[yellow]No collection dashboards matched the current filters.[/yellow]")
         return
 
-    console.print(f"[bold]Collection Dashboards[/bold] (sort={sort_by}):")
+    if summary is not None:
+        summary_line = (
+            f"total={summary.total} stale={summary.stale} unhealthy={summary.unhealthy} "
+            f"missing_preferred={summary.missing_preferred} with_bundle={summary.with_bundle} "
+            f"with_run={summary.with_run}"
+        )
+        console.print(f"[bold]Collection Dashboards[/bold] (sort={sort_by}): {summary_line}")
+        if summary.groups:
+            grouped_label = "disease area" if summary.grouped_by == "disease_area" else summary.grouped_by
+            console.print(f"grouped by {grouped_label}:")
+            for group in summary.groups:
+                console.print(
+                    "  - "
+                    f"{group.label} total={group.total} stale={group.stale} unhealthy={group.unhealthy}"
+                )
+    else:
+        console.print(f"[bold]Collection Dashboards[/bold] (sort={sort_by}):")
+
+    current_group: str | None = None
     for dashboard in dashboards:
         record = dashboard.collection
+        group_label = None
+        if group_by == "owner":
+            group_label = record.owner or "Unspecified"
+        elif group_by == "disease_area":
+            group_label = record.disease_area or "Unspecified"
+        if group_label != current_group and group_by:
+            console.print(f"[cyan]{group_label}[/cyan]")
+            current_group = group_label
         latest = dashboard.latest_activity_at.split("T", 1)[0] if dashboard.latest_activity_at else "n/a"
         status = f"stale ({dashboard.stale_days} days)" if dashboard.stale else (
             f"active ({dashboard.stale_days} days)" if dashboard.stale_days is not None else "unknown"

@@ -755,6 +755,7 @@ class EvidenceStore:
         only_unhealthy: bool = False,
         missing_workflow: str | None = None,
         sort_by: str = "activity",
+        group_by: str | None = None,
         limit: int = 50,
         timeline_limit: int = 10,
     ) -> list[CollectionDashboard]:
@@ -769,7 +770,10 @@ class EvidenceStore:
             self.get_collection_dashboard_model(record.slug, timeline_limit=timeline_limit)
             for record in records
         ]
-        return self._sort_collection_dashboards(dashboards, sort_by=sort_by)[:limit]
+        dashboards = self._sort_collection_dashboards(dashboards, sort_by=sort_by)
+        if group_by:
+            dashboards = self._group_collection_dashboards(dashboards, group_by=group_by)
+        return dashboards[:limit]
 
     def save_collection_bundle_artifacts(
         self,
@@ -1276,6 +1280,32 @@ class EvidenceStore:
                 key=lambda dashboard: dashboard.collection.collection.lower(),
             )
         raise ValueError(f"Unsupported collection dashboard sort: {sort_by}")
+
+    def _group_collection_dashboards(
+        self,
+        dashboards: list[CollectionDashboard],
+        *,
+        group_by: str,
+    ) -> list[CollectionDashboard]:
+        """Cluster already-sorted dashboards by owner or disease area."""
+        if group_by == "owner":
+            label_for = lambda dashboard: dashboard.collection.owner.strip() or "Unspecified"
+        elif group_by == "disease_area":
+            label_for = lambda dashboard: dashboard.collection.disease_area.strip() or "Unspecified"
+        else:
+            raise ValueError(f"Unsupported collection dashboard grouping: {group_by}")
+        grouped: dict[str, list[CollectionDashboard]] = {}
+        group_order: list[str] = []
+        for dashboard in dashboards:
+            label = label_for(dashboard)
+            if label not in grouped:
+                grouped[label] = []
+                group_order.append(label)
+            grouped[label].append(dashboard)
+        ordered: list[CollectionDashboard] = []
+        for label in group_order:
+            ordered.extend(grouped[label])
+        return ordered
 
     def _latest_collection_activity_timestamp(
         self,
