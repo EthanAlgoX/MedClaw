@@ -12,6 +12,7 @@ from medclaw.application import (
     build_artifact_payload_list_response,
     build_artifact_payload_response,
     build_artifact_query_filters,
+    build_collection_dashboard_response,
     build_collection_list_response,
     build_collection_response,
     build_research_run_list_response,
@@ -31,6 +32,7 @@ from medclaw.interfaces.cli.common import (
     console,
     emit_artifact_record,
     emit_artifact_record_list,
+    emit_collection_dashboard,
     emit_collection_manifest,
     emit_research_run,
     emit_research_run_record_list,
@@ -435,6 +437,27 @@ def research_collection_show(
         return
 
     emit_collection_manifest(collection_record)
+
+
+@research_app.command("dashboard")
+def research_dashboard(
+    name: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    timeline_limit: int = typer.Option(10, "--timeline-limit", min=1, help="Maximum timeline events to include."),
+):
+    """Show a unified dashboard for one research collection."""
+    store = get_evidence_store()
+    try:
+        dashboard = store.get_collection_dashboard_model(name, timeline_limit=timeline_limit)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if as_json:
+        write_json(build_collection_dashboard_response(dashboard))
+        return
+
+    emit_collection_dashboard(dashboard)
 
 
 @research_app.command("runs")

@@ -719,6 +719,83 @@ class TestCLI:
         assert "--collection" in result.stdout
         assert "--json" in result.stdout
 
+    def test_research_dashboard_command_aggregates_collection_state(self, tmp_path, monkeypatch):
+        """Research dashboard should merge collection stats, latest assets, and timeline."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="KRAS Program",
+            objective="Track KRAS evidence",
+            owner="Translational Team",
+            preferred_workflows=["literature_review", "evidence_brief"],
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="KRAS Review",
+            question="KRAS inhibitors",
+            summary="Summary",
+            generated_at="2026-03-08T09:00:00+00:00",
+            collection="KRAS Program",
+        )
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="literature_review",
+                    question="KRAS inhibitors",
+                    title="KRAS Review",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        self._seed_run(
+            test_home,
+            run_id="run-001",
+            query="KRAS inhibitors",
+            collection="KRAS Program",
+            workflow_ids=["literature_review"],
+            completed_at="2026-03-08T09:06:00+00:00",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "research", "dashboard", "KRAS Program", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        text_result = subprocess.run(
+            ["medclaw", "research", "dashboard", "KRAS Program"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["item"]["collection"]["collection"] == "KRAS Program"
+        assert payload["item"]["latest_report"]["kind"] == "report"
+        assert payload["item"]["latest_bundle"]["kind"] == "collection_bundle"
+        assert payload["item"]["latest_run"]["id"] == "run-001"
+        assert payload["item"]["missing_preferred_workflows"] == ["evidence_brief"]
+
+        assert text_result.returncode == 0
+        assert "KRAS Program" in text_result.stdout
+        assert "latest report: KRAS Review" in text_result.stdout
+        assert "latest run: run-001" in text_result.stdout
+
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
         """Research runs command should expose typed saved run records."""
         test_home = tmp_path / "test_home"

@@ -5,6 +5,7 @@ from medclaw.application.responses import (
     build_artifact_payload_list_response,
     build_artifact_payload_response,
     build_artifact_query_filters,
+    build_collection_dashboard_response,
     build_collection_list_response,
     build_collection_response,
     build_config_response,
@@ -24,6 +25,7 @@ from medclaw.application.responses import (
 )
 from medclaw.application.query_models import SkillSummary, WorkflowSummary
 from medclaw.evidence.api_models import (
+    CollectionDashboard,
     artifact_record_from_dict,
     collection_manifest_from_dict,
     collection_record_from_dict,
@@ -106,6 +108,38 @@ class TestApplicationResponses:
 
         assert response.model_dump(mode="json")["items"][0]["title"] == "KRAS Review"
         assert response.model_dump(mode="json")["filters"]["collection"] == "KRAS Program"
+
+    def test_build_collection_dashboard_response(self):
+        dashboard = CollectionDashboard(
+            collection=collection_record_from_dict(
+                {
+                    "collection": "KRAS Program",
+                    "slug": "kras-program",
+                    "objective": "Track KRAS evidence",
+                    "disease_area": "Oncology",
+                    "owner": "Translational Team",
+                    "tags": ["kras"],
+                    "preferred_workflows": ["literature_review", "evidence_brief"],
+                    "created_at": "",
+                    "updated_at": "",
+                    "report_count": 1,
+                    "evidence_count": 2,
+                    "citation_count": 2,
+                    "latest_generated_at": "2026-03-08T09:00:00+00:00",
+                    "latest_bundle_generated_at": "",
+                    "latest_bundle_markdown_path": "",
+                    "latest_bundle_json_path": "",
+                    "workflows": ["literature_review"],
+                    "titles": ["KRAS Review"],
+                }
+            ),
+            covered_workflows=["literature_review"],
+            missing_preferred_workflows=["evidence_brief"],
+        )
+
+        response = build_collection_dashboard_response(dashboard)
+
+        assert response.model_dump(mode="json")["item"]["collection"]["collection"] == "KRAS Program"
 
     def test_build_artifact_responses(self):
         filters = build_artifact_query_filters(kind="report", latest=True, limit=1)

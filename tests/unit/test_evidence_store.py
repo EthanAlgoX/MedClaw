@@ -177,6 +177,71 @@ class TestEvidenceStore:
         assert typed_records[0].kind == "research_run"
         assert typed_records[0].workflow_ids == ["study_design", "evidence_brief"]
 
+    def test_get_collection_dashboard_model_aggregates_latest_assets(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="KRAS Program",
+            objective="Track KRAS evidence",
+            owner="Translational Team",
+            preferred_workflows=["literature_review", "evidence_brief"],
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="KRAS inhibitors",
+                title="KRAS Review",
+                summary="Summary",
+                generated_at="2026-03-08T09:00:00+00:00",
+                metadata={"collection": "KRAS Program"},
+            )
+        )
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="study_design",
+                    question="KRAS inhibitors",
+                    title="Study Design Assistant: KRAS inhibitors",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+                ResearchReport(
+                    workflow_id="literature_review",
+                    question="KRAS inhibitors",
+                    title="KRAS Review",
+                    summary="Summary",
+                    generated_at="2026-03-08T09:05:00+00:00",
+                    metadata={"collection": "KRAS Program"},
+                ),
+            ],
+            markdown_summary="# Collection Brief: KRAS Program",
+        )
+        store.save_run(
+            ResearchRun(
+                id="run-123",
+                query="KRAS inhibitors",
+                collection="KRAS Program",
+                started_at="2026-03-08T09:06:00+00:00",
+                completed_at="2026-03-08T09:06:00+00:00",
+                workflow_runs=[
+                    WorkflowRun(workflow_id="literature_review", question="KRAS inhibitors"),
+                ],
+            )
+        )
+
+        dashboard = store.get_collection_dashboard_model("KRAS Program", timeline_limit=3)
+
+        assert dashboard.collection.collection == "KRAS Program"
+        assert dashboard.latest_report is not None
+        assert dashboard.latest_report.kind == "report"
+        assert dashboard.latest_bundle is not None
+        assert dashboard.latest_bundle.kind == "collection_bundle"
+        assert dashboard.latest_run is not None
+        assert dashboard.latest_run.id == "run-123"
+        assert dashboard.covered_workflows == ["literature_review", "study_design"]
+        assert dashboard.missing_preferred_workflows == ["evidence_brief"]
+        assert len(dashboard.timeline) == 3
+
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
         report = ResearchReport(

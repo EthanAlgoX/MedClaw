@@ -25,6 +25,8 @@ from medclaw.evidence.api_models import (
     CollectionManifest,
     CollectionRecord,
     CollectionResponse,
+    CollectionDashboard,
+    CollectionDashboardResponse,
     ResearchRunListResponse,
     ResearchRunQueryFilters,
     ResearchRunRecord,
@@ -283,6 +285,11 @@ def build_collection_list_response(
 def build_collection_response(record: CollectionRecord | CollectionManifest) -> CollectionResponse:
     """Build a typed single collection response."""
     return CollectionResponse(item=record)
+
+
+def build_collection_dashboard_response(dashboard: CollectionDashboard) -> CollectionDashboardResponse:
+    """Build a typed collection dashboard response."""
+    return CollectionDashboardResponse(item=dashboard)
 
 
 def build_workflow_summary(record: dict[str, str]) -> WorkflowSummary:

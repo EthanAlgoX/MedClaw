@@ -17,6 +17,7 @@ from medclaw.application import (
     build_artifact_list_response,
     build_artifact_payload_list_response,
     build_artifact_payload_response,
+    build_collection_dashboard_response,
     build_collection_response,
     build_config_response,
     build_provider_summary,
@@ -33,6 +34,7 @@ from medclaw.config.loader import (
 from medclaw.config.schema import ProviderConfig
 from medclaw.evidence.api_models import (
     ArtifactRecord,
+    CollectionDashboard,
     CollectionBundleArtifactRecord,
     CollectionRecord,
     ResearchRunRecord,
@@ -453,6 +455,44 @@ def emit_collection_manifest(record: CollectionRecord) -> None:
         console.print(f"active workflows: {', '.join(record.workflows)}")
     if record.latest_bundle_markdown_path:
         console.print(f"latest bundle: {record.latest_bundle_markdown_path}")
+
+
+def emit_collection_dashboard(
+    dashboard: CollectionDashboard,
+    *,
+    as_json: bool = False,
+) -> None:
+    """Render one collection dashboard in text or JSON form."""
+    if as_json:
+        write_json(build_collection_dashboard_response(dashboard))
+        return
+
+    record = dashboard.collection
+    console.print(f"[bold]{record.collection}[/bold]")
+    console.print(f"slug: {record.slug}")
+    console.print(f"reports: {record.report_count}")
+    console.print(f"workflows covered: {', '.join(dashboard.covered_workflows) or 'n/a'}")
+    if record.objective:
+        console.print(f"objective: {record.objective}")
+    if record.owner:
+        console.print(f"owner: {record.owner}")
+    if record.preferred_workflows:
+        console.print(f"preferred workflows: {', '.join(record.preferred_workflows)}")
+    if dashboard.missing_preferred_workflows:
+        console.print(
+            f"missing preferred workflows: {', '.join(dashboard.missing_preferred_workflows)}"
+        )
+    if dashboard.latest_report is not None:
+        console.print(f"latest report: {dashboard.latest_report.title}")
+    if dashboard.latest_bundle is not None:
+        console.print(f"latest bundle: {dashboard.latest_bundle.path}")
+    if dashboard.latest_run is not None:
+        console.print(f"latest run: {dashboard.latest_run.id} ({dashboard.latest_run.scope})")
+    if dashboard.timeline:
+        console.print("recent timeline:")
+        for timeline_record in dashboard.timeline[:5]:
+            event_date = timeline_record.timestamp.split("T", 1)[0] if timeline_record.timestamp else "n/a"
+            console.print(f"  - {event_date} ({timeline_record.kind}) {timeline_record.title}")
 
 
 def emit_research_run(run: ResearchRun) -> None:

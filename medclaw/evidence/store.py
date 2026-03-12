@@ -15,6 +15,7 @@ from medclaw.evidence.artifacts import (
 )
 from medclaw.evidence.api_models import (
     ArtifactRecord,
+    CollectionDashboard,
     CollectionManifest,
     CollectionRecord,
     ResearchRunRecord,
@@ -551,6 +552,64 @@ class EvidenceStore:
                 "workflows": [],
                 "titles": [],
             }
+        )
+
+    def get_collection_dashboard_model(
+        self,
+        name_or_slug: str,
+        *,
+        timeline_limit: int = 10,
+    ) -> CollectionDashboard:
+        """Resolve a unified dashboard for one collection."""
+        collection_record = self.get_collection_record_model(name_or_slug)
+        latest_report = self.list_artifact_record_models(
+            kind="report",
+            collection=collection_record.collection,
+            latest=True,
+            limit=1,
+        )
+        latest_bundle = self.list_artifact_record_models(
+            kind="bundle",
+            collection=collection_record.collection,
+            latest=True,
+            limit=1,
+        )
+        latest_run = self.list_run_record_models(
+            collection=collection_record.collection,
+            latest=True,
+            limit=1,
+        )
+        timeline = self.list_timeline_record_models(
+            collection=collection_record.collection,
+            limit=timeline_limit,
+        )
+
+        covered_workflows: list[str] = []
+        seen: set[str] = set()
+        for workflow_id in collection_record.workflows:
+            if workflow_id not in seen:
+                seen.add(workflow_id)
+                covered_workflows.append(workflow_id)
+        for timeline_record in timeline:
+            for workflow_id in timeline_record.workflow_ids:
+                if workflow_id not in seen and workflow_id != "collection_bundle":
+                    seen.add(workflow_id)
+                    covered_workflows.append(workflow_id)
+
+        missing_preferred_workflows = [
+            workflow_id
+            for workflow_id in collection_record.preferred_workflows
+            if workflow_id not in seen
+        ]
+
+        return CollectionDashboard(
+            collection=collection_record,
+            latest_report=latest_report[0] if latest_report else None,
+            latest_bundle=latest_bundle[0] if latest_bundle else None,
+            latest_run=latest_run[0] if latest_run else None,
+            timeline=timeline,
+            covered_workflows=covered_workflows,
+            missing_preferred_workflows=missing_preferred_workflows,
         )
 
     def save_collection_bundle_artifacts(

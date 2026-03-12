@@ -4,6 +4,7 @@ from medclaw.evidence.api_models import (
     ArtifactListResponse,
     ArtifactPayloadResponse,
     ArtifactQueryFilters,
+    CollectionDashboardResponse,
     CollectionListResponse,
     CollectionResponse,
     ResearchRunListResponse,
@@ -201,3 +202,37 @@ class TestArtifactApiModels:
 
         assert response.model_dump(mode="json")["items"][0]["kind"] == "research_run"
         assert response.model_dump(mode="json")["filters"]["collection"] == "KRAS Program"
+
+    def test_collection_dashboard_response_models_dump_envelopes(self):
+        response = CollectionDashboardResponse(
+            item={
+                "collection": {
+                    "collection": "KRAS Program",
+                    "slug": "kras-program",
+                    "objective": "Track KRAS evidence",
+                    "disease_area": "Oncology",
+                    "owner": "Translational Team",
+                    "tags": ["kras"],
+                    "preferred_workflows": ["literature_review", "evidence_brief"],
+                    "created_at": "",
+                    "updated_at": "",
+                    "report_count": 1,
+                    "evidence_count": 2,
+                    "citation_count": 2,
+                    "latest_generated_at": "2026-03-08T09:00:00+00:00",
+                    "latest_bundle_generated_at": "",
+                    "latest_bundle_markdown_path": "",
+                    "latest_bundle_json_path": "",
+                    "workflows": ["literature_review"],
+                    "titles": ["KRAS Review"],
+                },
+                "latest_report": None,
+                "latest_bundle": None,
+                "latest_run": None,
+                "timeline": [],
+                "covered_workflows": ["literature_review"],
+                "missing_preferred_workflows": ["evidence_brief"],
+            }
+        )
+
+        assert response.model_dump(mode="json")["item"]["collection"]["slug"] == "kras-program"

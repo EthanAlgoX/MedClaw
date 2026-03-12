@@ -246,6 +246,24 @@ class CollectionListResponse(BaseModel):
     limit: int
 
 
+class CollectionDashboard(BaseModel):
+    """Unified collection dashboard across registry, artifacts, runs, and timeline."""
+
+    collection: CollectionRecord
+    latest_report: ArtifactRecord | None = None
+    latest_bundle: ArtifactRecord | None = None
+    latest_run: ResearchRunRecord | None = None
+    timeline: list[ResearchTimelineRecord] = Field(default_factory=list)
+    covered_workflows: list[str] = Field(default_factory=list)
+    missing_preferred_workflows: list[str] = Field(default_factory=list)
+
+
+class CollectionDashboardResponse(BaseModel):
+    """Typed collection dashboard response."""
+
+    item: CollectionDashboard
+
+
 def artifact_record_from_dict(record: dict[str, Any]) -> ArtifactRecord:
     """Validate one artifact record."""
     return _ARTIFACT_RECORD_ADAPTER.validate_python(record)
