@@ -41,8 +41,28 @@ class RunCoordinator:
         return self.report_persistence.persist_report(
             report,
             llm_enabled=provider is not None,
+            provider_name=self._provider_name(provider),
+            model_name=self._model_name(provider),
         )
 
     def render(self, report: ResearchReport) -> str:
         """Render a workflow report into markdown."""
         return render_research_report(report)
+
+    def _provider_name(self, provider: LLMProvider | None) -> str:
+        """Infer a stable provider label for run metadata."""
+        if provider is None:
+            return ""
+        name = provider.__class__.__name__
+        if name.endswith("Provider"):
+            name = name[:-8]
+        return name.lower()
+
+    def _model_name(self, provider: LLMProvider | None) -> str:
+        """Resolve the default model associated with the execution provider."""
+        if provider is None:
+            return ""
+        try:
+            return provider.get_default_model()
+        except Exception:
+            return ""

@@ -129,6 +129,12 @@ def test_run_workflow_report_without_llm(temp_workspace: Path, monkeypatch):
     assert report.metadata["saved_path"]
     assert report.metadata["artifact_dir"]
     assert report.metadata["artifact_paths"]["citations"].endswith("citations.json")
+    assert report.metadata["run_id"]
+    assert report.metadata["run_path"]
+    saved_run = use_cases.orchestrator.evidence_store.load_run(report.metadata["run_path"])
+    assert saved_run.query == "KRAS inhibitors"
+    assert saved_run.workflow_runs[0].workflow_id == "literature_review"
+    assert saved_run.workflow_runs[0].llm_enabled is False
 
 
 def test_run_workflow_report_injects_collection_manifest_context(temp_workspace: Path, monkeypatch):
@@ -172,11 +178,16 @@ def test_run_workflow_report_injects_collection_manifest_context(temp_workspace:
     )
 
     saved_report = use_cases.orchestrator.evidence_store.load_report(report.metadata["saved_path"])
+    saved_run = use_cases.orchestrator.evidence_store.load_run(report.metadata["run_path"])
 
     assert report.metadata["collection"] == "KRAS Program"
     assert report.metadata["collection_objective"] == "Track resistance mechanisms and biomarker evidence"
     assert report.metadata["collection_preferred_workflows"] == ["literature_review", "evidence_brief"]
     assert saved_report.metadata["collection_slug"] == "kras-program"
+    assert saved_report.metadata["run_id"] == report.metadata["run_id"]
+    assert saved_run.collection == "KRAS Program"
+    assert saved_run.workflow_runs[0].provider_name == "capture"
+    assert saved_run.workflow_runs[0].model_name == "capture-model"
     assert provider.messages is not None
     assert "Collection: KRAS Program" in provider.messages[1]["content"]
     assert "Track resistance mechanisms and biomarker evidence" in provider.messages[1]["content"]

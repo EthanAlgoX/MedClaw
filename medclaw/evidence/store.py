@@ -23,7 +23,7 @@ from medclaw.evidence.api_models import (
     collection_record_from_dict,
     collection_records_from_dicts,
 )
-from medclaw.evidence.models import Citation, ResearchReport
+from medclaw.evidence.models import Citation, ResearchReport, ResearchRun
 
 
 class EvidenceStore:
@@ -34,8 +34,10 @@ class EvidenceStore:
         self.base_path = workspace / "research"
         self.reports_path = self.base_path / "reports"
         self.collections_path = self.base_path / "collections"
+        self.runs_path = self.base_path / "runs"
         self.reports_path.mkdir(parents=True, exist_ok=True)
         self.collections_path.mkdir(parents=True, exist_ok=True)
+        self.runs_path.mkdir(parents=True, exist_ok=True)
 
     def save_report(self, report: ResearchReport) -> Path:
         """Save a structured research report to disk."""
@@ -108,9 +110,62 @@ class EvidenceStore:
             "metadata": metadata_path,
         }
 
+    def update_report_artifacts(
+        self,
+        report: ResearchReport,
+        artifact_paths: dict[str, Path | str],
+    ) -> None:
+        """Rewrite report and metadata artifacts after post-save metadata changes."""
+        report_path = Path(artifact_paths["report"])
+        artifact_dir = Path(artifact_paths["artifact_dir"])
+        metadata_path = Path(artifact_paths["metadata"])
+
+        report_path.write_text(
+            json.dumps(report.model_dump(mode="json"), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        citations = self._collect_citations(report)
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "workflow_id": report.workflow_id,
+                    "question": report.question,
+                    "title": report.title,
+                    "generated_at": report.generated_at,
+                    "artifact_dir": str(artifact_dir),
+                    "report_path": str(report_path),
+                    "evidence_count": len(report.evidence),
+                    "citation_count": len(citations),
+                    "metadata": report.metadata,
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
     def list_reports(self) -> list[Path]:
         """List saved research reports, newest first."""
         return sorted(self.reports_path.glob("*.json"), reverse=True)
+
+    def save_run(self, run: ResearchRun) -> Path:
+        """Save a structured research run to disk."""
+        path = self._build_run_path(run)
+        path.write_text(
+            json.dumps(run.model_dump(mode="json"), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return path
+
+    def load_run(self, path: Path | str) -> ResearchRun:
+        """Load a structured research run from disk."""
+        run_path = self.resolve_run_path(path)
+        return ResearchRun.model_validate_json(run_path.read_text(encoding="utf-8"))
+
+    def list_runs(self) -> list[Path]:
+        """List saved research runs, newest first."""
+        return sorted(self.runs_path.glob("*.json"), reverse=True)
 
     def list_report_records(self, limit: int = 50) -> list[dict[str, Any]]:
         """List report metadata records, newest first."""
@@ -560,6 +615,20 @@ class EvidenceStore:
             return report_path
         raise FileNotFoundError(f"Could not find research report: {path}")
 
+    def resolve_run_path(self, path: Path | str) -> Path:
+        """Resolve a run path from an absolute path, relative path, or filename."""
+        candidate = Path(path)
+        if candidate.exists() and candidate.is_file():
+            return candidate
+        run_path = self.runs_path / candidate.name
+        if run_path.exists() and run_path.is_file():
+            return run_path
+        if candidate.suffix != ".json":
+            suffixed_path = self.runs_path / f"{candidate.name}.json"
+            if suffixed_path.exists() and suffixed_path.is_file():
+                return suffixed_path
+        raise FileNotFoundError(f"Could not find research run: {path}")
+
     def get_artifact_paths(self, path: Path | str) -> dict[str, Path]:
         """Return the file bundle associated with a saved report."""
         report_path = self.resolve_report_path(path)
@@ -668,6 +737,11 @@ class EvidenceStore:
         slug = report.workflow_id.replace("/", "-").replace("_", "-")
         filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{slug}.json"
         return self.reports_path / filename
+
+    def _build_run_path(self, run: ResearchRun) -> Path:
+        """Build a timestamped run path."""
+        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{run.id}.json"
+        return self.runs_path / filename
 
     def _build_bundle_slug(self, collection_slug: str) -> str:
         """Build a timestamped collection bundle slug."""

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport
+from medclaw.evidence.models import Citation, EvidenceItem, ResearchReport, ResearchRun, WorkflowRun
 from medclaw.evidence.store import EvidenceStore
 
 
@@ -46,6 +46,36 @@ class TestEvidenceStore:
         reports = store.list_reports()
 
         assert len(reports) == 2
+
+    def test_save_and_load_run_preserves_workflow_execution_metadata(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        run = ResearchRun(
+            query="KRAS inhibitors",
+            collection="KRAS Program",
+            workflow_runs=[
+                WorkflowRun(
+                    workflow_id="literature_review",
+                    question="KRAS inhibitors",
+                    llm_enabled=True,
+                    provider_name="fake",
+                    model_name="fake-model",
+                    report_path="/tmp/report.json",
+                    artifact_dir="/tmp/report_artifacts",
+                    artifact_paths={"report": "/tmp/report.json"},
+                )
+            ],
+            metadata={"workflow_count": 1},
+        )
+
+        path = store.save_run(run)
+        loaded = store.load_run(path)
+
+        assert path.exists()
+        assert path.parent == temp_workspace / "research" / "runs"
+        assert loaded.id == run.id
+        assert loaded.collection == "KRAS Program"
+        assert loaded.workflow_runs[0].workflow_id == "literature_review"
+        assert loaded.workflow_runs[0].model_name == "fake-model"
 
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
