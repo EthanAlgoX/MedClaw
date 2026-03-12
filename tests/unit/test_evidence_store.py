@@ -464,6 +464,82 @@ class TestEvidenceStore:
         assert loaded["tags"] == ["egfr", "nsclc", "biomarker"]
         assert loaded["preferred_workflows"] == ["evidence_brief", "literature_review"]
 
+    def test_filter_collection_record_models_supports_health_triage(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Track stale activity",
+            preferred_workflows=["literature_review"],
+        )
+        store.save_collection_manifest(
+            name="Gap Program",
+            objective="Track preferred workflow coverage",
+            preferred_workflows=["evidence_brief"],
+        )
+        store.save_collection_manifest(
+            name="Healthy Program",
+            objective="Track active execution",
+            preferred_workflows=["literature_review"],
+        )
+
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Legacy topic",
+                title="Legacy Review",
+                summary="Summary",
+                generated_at="2025-01-01T09:00:00+00:00",
+                metadata={"collection": "Dormant Program"},
+            )
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Coverage topic",
+                title="Coverage Review",
+                summary="Summary",
+                generated_at="2026-03-08T09:00:00+00:00",
+                metadata={"collection": "Gap Program"},
+            )
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Healthy topic",
+                title="Healthy Review",
+                summary="Summary",
+                generated_at="2026-03-09T09:00:00+00:00",
+                metadata={"collection": "Healthy Program"},
+            )
+        )
+        store.save_run(
+            ResearchRun(
+                id="run-healthy",
+                query="Healthy topic",
+                collection="Healthy Program",
+                started_at="2026-03-09T09:00:00+00:00",
+                completed_at="2026-03-09T09:00:00+00:00",
+                workflow_runs=[
+                    WorkflowRun(workflow_id="literature_review", question="Healthy topic"),
+                ],
+            )
+        )
+
+        stale_records = store.filter_collection_record_models(only_stale=True, limit=10)
+        unhealthy_records = store.filter_collection_record_models(only_unhealthy=True, limit=10)
+        missing_workflow_records = store.filter_collection_record_models(
+            missing_workflow="evidence_brief",
+            limit=10,
+        )
+
+        assert [record.collection for record in stale_records] == ["Dormant Program"]
+        assert {record.collection for record in unhealthy_records} == {
+            "Dormant Program",
+            "Gap Program",
+            "Healthy Program",
+        }
+        assert [record.collection for record in missing_workflow_records] == ["Gap Program"]
+
     def test_read_artifact_returns_structured_payloads(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
         report = ResearchReport(

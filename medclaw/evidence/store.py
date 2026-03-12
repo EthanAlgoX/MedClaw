@@ -582,9 +582,53 @@ class EvidenceStore:
         )
         return ordered[:limit]
 
+    def filter_collection_records(
+        self,
+        *,
+        only_stale: bool = False,
+        only_unhealthy: bool = False,
+        missing_workflow: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Filter collection aggregate records by health-oriented triage criteria."""
+        normalized_missing_workflow = missing_workflow.strip().lower() if missing_workflow else ""
+        records = self.list_collection_records(limit=1000)
+        filtered = []
+        for record in records:
+            if only_stale and not record["stale"]:
+                continue
+            if only_unhealthy and not record["health_signals"]:
+                continue
+            if normalized_missing_workflow and normalized_missing_workflow not in {
+                workflow_id.lower() for workflow_id in record["missing_preferred_workflows"]
+            }:
+                continue
+            filtered.append(record)
+            if len(filtered) >= limit:
+                break
+        return filtered
+
     def list_collection_record_models(self, limit: int = 50) -> list[CollectionRecord]:
         """Aggregate saved reports by collection as typed models."""
         return collection_records_from_dicts(self.list_collection_records(limit=limit))
+
+    def filter_collection_record_models(
+        self,
+        *,
+        only_stale: bool = False,
+        only_unhealthy: bool = False,
+        missing_workflow: str | None = None,
+        limit: int = 50,
+    ) -> list[CollectionRecord]:
+        """Filter collection aggregate records as typed models."""
+        return collection_records_from_dicts(
+            self.filter_collection_records(
+                only_stale=only_stale,
+                only_unhealthy=only_unhealthy,
+                missing_workflow=missing_workflow,
+                limit=limit,
+            )
+        )
 
     def get_collection_record_model(self, name_or_slug: str) -> CollectionRecord:
         """Resolve one collection aggregate record, synthesizing an empty record if needed."""

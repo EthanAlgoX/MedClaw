@@ -346,12 +346,32 @@ def research_latest(
 
 @research_app.command("collections")
 def research_collections(
+    only_stale: bool = typer.Option(
+        False,
+        "--only-stale",
+        help="Only include collections with stale activity.",
+    ),
+    only_unhealthy: bool = typer.Option(
+        False,
+        "--only-unhealthy",
+        help="Only include collections with health signals.",
+    ),
+    missing_workflow: str | None = typer.Option(
+        None,
+        "--missing-workflow",
+        help="Only include collections missing a preferred workflow.",
+    ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
 ):
     """List named research collections."""
     store = get_evidence_store()
-    records = store.list_collection_record_models(limit=limit)
+    records = store.filter_collection_record_models(
+        only_stale=only_stale,
+        only_unhealthy=only_unhealthy,
+        missing_workflow=missing_workflow,
+        limit=limit,
+    )
     if as_json:
         write_json(build_collection_list_response(records, limit=limit))
         return
@@ -360,7 +380,16 @@ def research_collections(
         console.print("[yellow]No named research collections found.[/yellow]")
         return
 
-    console.print("[bold]Research Collections:[/bold]")
+    filter_suffix = []
+    if only_stale:
+        filter_suffix.append("only_stale")
+    if only_unhealthy:
+        filter_suffix.append("only_unhealthy")
+    if missing_workflow:
+        filter_suffix.append(f"missing_workflow={missing_workflow}")
+    suffix = f" ({', '.join(filter_suffix)})" if filter_suffix else ""
+
+    console.print(f"[bold]Research Collections{suffix}:[/bold]")
     for record in records:
         latest = record.latest_activity_at.split("T", 1)[0] if record.latest_activity_at else "n/a"
         console.print(

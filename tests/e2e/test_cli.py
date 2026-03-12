@@ -1668,6 +1668,98 @@ class TestCLI:
         assert text_result.returncode == 0
         assert "health: no_run" in text_result.stdout
 
+    def test_research_collections_command_supports_health_filters(self, tmp_path, monkeypatch):
+        """Research collections command should support stale and unhealthy triage filters."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Track stale activity",
+            preferred_workflows=["literature_review"],
+        )
+        store.save_collection_manifest(
+            name="Gap Program",
+            objective="Track workflow coverage",
+            preferred_workflows=["evidence_brief"],
+        )
+        store.save_collection_manifest(
+            name="Healthy Program",
+            objective="Track active execution",
+            preferred_workflows=["literature_review"],
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Legacy Review",
+            question="Legacy topic",
+            summary="Summary",
+            generated_at="2025-01-01T09:00:00+00:00",
+            collection="Dormant Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Coverage Review",
+            question="Coverage topic",
+            summary="Summary",
+            generated_at="2026-03-08T09:00:00+00:00",
+            collection="Gap Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Healthy Review",
+            question="Healthy topic",
+            summary="Summary",
+            generated_at="2026-03-09T09:00:00+00:00",
+            collection="Healthy Program",
+        )
+        self._seed_run(
+            test_home,
+            run_id="run-healthy",
+            query="Healthy topic",
+            collection="Healthy Program",
+            workflow_ids=["literature_review"],
+            completed_at="2026-03-09T09:00:00+00:00",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        stale_result = subprocess.run(
+            ["medclaw", "research", "collections", "--only-stale", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        unhealthy_result = subprocess.run(
+            ["medclaw", "research", "collections", "--only-unhealthy", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        missing_result = subprocess.run(
+            ["medclaw", "research", "collections", "--missing-workflow", "evidence_brief", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert stale_result.returncode == 0
+        stale_payload = json.loads(stale_result.stdout)
+        assert [item["collection"] for item in stale_payload["items"]] == ["Dormant Program"]
+
+        assert unhealthy_result.returncode == 0
+        unhealthy_payload = json.loads(unhealthy_result.stdout)
+        assert {item["collection"] for item in unhealthy_payload["items"]} == {
+            "Dormant Program",
+            "Gap Program",
+            "Healthy Program",
+        }
+
+        assert missing_result.returncode == 0
+        missing_payload = json.loads(missing_result.stdout)
+        assert [item["collection"] for item in missing_payload["items"]] == ["Gap Program"]
+
     def test_research_collection_set_and_show_commands_manage_manifest(self, tmp_path, monkeypatch):
         """Research collection manifest commands should create and retrieve project metadata."""
         test_home = tmp_path / "test_home"
