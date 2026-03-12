@@ -237,6 +237,171 @@ class TestCLI:
         assert config_payload["providers"]["deepseek"]["apiKey"] == "test-key"
         assert config_payload["agents"]["defaults"]["provider"] == "deepseek"
 
+    def test_system_provider_show_and_default_commands_support_json(self, tmp_path, monkeypatch):
+        """Provider show/default commands should expose typed JSON responses."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        subprocess.run(
+            [
+                "medclaw",
+                "system",
+                "provider-set",
+                "deepseek",
+                "--api-key",
+                "deepseek-key",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        subprocess.run(
+            [
+                "medclaw",
+                "system",
+                "provider-set",
+                "openrouter",
+                "--api-key",
+                "openrouter-key",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+
+        default_result = subprocess.run(
+            ["medclaw", "system", "provider-default", "deepseek", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        show_result = subprocess.run(
+            ["medclaw", "system", "provider-show", "deepseek", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert default_result.returncode == 0
+        default_payload = json.loads(default_result.stdout)
+        assert default_payload["item"]["name"] == "deepseek"
+        assert default_payload["item"]["is_default"] is True
+
+        assert show_result.returncode == 0
+        show_payload = json.loads(show_result.stdout)
+        assert show_payload["item"]["name"] == "deepseek"
+        assert show_payload["item"]["has_api_key"] is True
+        assert show_payload["item"]["is_default"] is True
+
+    def test_system_provider_default_requires_configured_api_key(self, tmp_path, monkeypatch):
+        """Provider default command should reject providers without API keys."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            ["medclaw", "system", "provider-default", "anthropic"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 1
+        assert "must have an API key" in result.stdout
+
+    def test_system_provider_unset_reassigns_default_when_possible(self, tmp_path, monkeypatch):
+        """Provider unset should switch the default to another configured provider."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        subprocess.run(
+            [
+                "medclaw",
+                "system",
+                "provider-set",
+                "deepseek",
+                "--api-key",
+                "deepseek-key",
+                "--default",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        subprocess.run(
+            [
+                "medclaw",
+                "system",
+                "provider-set",
+                "openrouter",
+                "--api-key",
+                "openrouter-key",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+
+        unset_result = subprocess.run(
+            ["medclaw", "system", "provider-unset", "deepseek", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        providers_result = subprocess.run(
+            ["medclaw", "system", "providers", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert unset_result.returncode == 0
+        unset_payload = json.loads(unset_result.stdout)
+        assert unset_payload["item"]["name"] == "deepseek"
+        assert unset_payload["item"]["configured"] is False
+        assert unset_payload["item"]["is_default"] is False
+
+        providers_payload = json.loads(providers_result.stdout)
+        assert providers_payload["default_provider"] == "openrouter"
+
+    def test_system_provider_unset_rejects_removing_last_default_provider(self, tmp_path, monkeypatch):
+        """Provider unset should reject removing the last usable default provider."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        subprocess.run(
+            [
+                "medclaw",
+                "system",
+                "provider-set",
+                "deepseek",
+                "--api-key",
+                "deepseek-key",
+                "--default",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+
+        result = subprocess.run(
+            ["medclaw", "system", "provider-unset", "deepseek"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 1
+        assert "Cannot unset default provider" in result.stdout
+
     def test_help_command(self):
         """Test help command works."""
         result = subprocess.run(

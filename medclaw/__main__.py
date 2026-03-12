@@ -60,6 +60,7 @@ app = typer.Typer(help="MedClaw - AI-powered medical research assistant")
 research_app = typer.Typer(help="Typed medical research workflows")
 system_app = typer.Typer(help="System inspection and configuration")
 console = Console()
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "openrouter", "deepseek", "google")
 
 app.add_typer(research_app, name="research")
 app.add_typer(system_app, name="system")
@@ -266,6 +267,28 @@ def system_config(
     console.print(f"workspace: {response.item.workspace.path}")
 
 
+@system_app.command("provider-show")
+def system_provider_show(
+    name: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Show one provider configuration."""
+    provider = _load_provider_summary(load_config(), name)
+    if as_json:
+        _write_json(build_provider_response(provider))
+        return
+
+    status = "configured" if provider.configured else "not-configured"
+    suffix = " default" if provider.is_default else ""
+    console.print(f"[bold]Provider:[/bold] {provider.name}")
+    console.print(f"status: {status}{suffix}")
+    console.print(f"api key: {'set' if provider.has_api_key else 'missing'}")
+    if provider.base_url:
+        console.print(f"base url: {provider.base_url}")
+    if provider.organization:
+        console.print(f"organization: {provider.organization}")
+
+
 @system_app.command("provider-set")
 def system_provider_set(
     name: str,
@@ -276,9 +299,7 @@ def system_provider_set(
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
 ):
     """Create or update one provider configuration."""
-    if name not in {"openai", "anthropic", "openrouter", "deepseek", "google"}:
-        console.print("[red]Error:[/red] Unsupported provider. Choose from: openai, anthropic, openrouter, deepseek, google")
-        raise typer.Exit(1)
+    _ensure_supported_provider_name(name)
 
     config = load_config()
     current = getattr(config.providers, name, None) or ProviderConfig()
@@ -289,17 +310,11 @@ def system_provider_set(
     )
     setattr(config.providers, name, updated)
     if make_default:
+        _ensure_provider_has_api_key(name, updated)
         config.agents.defaults.provider = name
     save_config(config)
 
-    provider = build_provider_summary(
-        name=name,
-        configured=True,
-        has_api_key=bool(updated.apiKey),
-        base_url=updated.baseUrl,
-        organization=updated.organization,
-        is_default=config.agents.defaults.provider == name,
-    )
+    provider = _load_provider_summary(config, name)
     if as_json:
         _write_json(build_provider_response(provider))
         return
@@ -311,6 +326,58 @@ def system_provider_set(
         console.print(f"base url: {provider.base_url}")
     if provider.organization:
         console.print(f"organization: {provider.organization}")
+
+
+@system_app.command("provider-default")
+def system_provider_default(
+    name: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Make a configured provider the default selection."""
+    config = load_config()
+    provider_config = _load_provider_config(config, name)
+    _ensure_provider_has_api_key(name, provider_config)
+    config.agents.defaults.provider = name
+    save_config(config)
+
+    provider = _load_provider_summary(config, name)
+    if as_json:
+        _write_json(build_provider_response(provider))
+        return
+
+    console.print(f"[green]Default provider set:[/green] {provider.name}")
+    console.print(f"api key: {'set' if provider.has_api_key else 'missing'}")
+
+
+@system_app.command("provider-unset")
+def system_provider_unset(
+    name: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Remove one provider configuration."""
+    config = load_config()
+    _ensure_supported_provider_name(name)
+    current_default = config.agents.defaults.provider
+    replacement_default = _choose_replacement_default(config, removed_provider=name)
+    if current_default == name and replacement_default is None:
+        console.print(
+            f"[red]Error:[/red] Cannot unset default provider '{name}' without another configured provider with an API key."
+        )
+        raise typer.Exit(1)
+
+    setattr(config.providers, name, None)
+    if current_default == name and replacement_default is not None:
+        config.agents.defaults.provider = replacement_default
+    save_config(config)
+
+    provider = _load_provider_summary(config, name)
+    if as_json:
+        _write_json(build_provider_response(provider))
+        return
+
+    console.print(f"[green]Removed provider:[/green] {name}")
+    if current_default == name and replacement_default is not None:
+        console.print(f"default switched to: {replacement_default}")
 
 
 def _get_research_use_cases() -> MedicalResearchUseCases:
@@ -341,19 +408,54 @@ def _get_configured_provider():
 def _build_provider_summaries(config) -> list:
     """Build typed provider summaries from config."""
     summaries = []
-    for name in ("openai", "anthropic", "openrouter", "deepseek", "google"):
-        provider = getattr(config.providers, name, None)
-        summaries.append(
-            build_provider_summary(
-                name=name,
-                configured=provider is not None,
-                has_api_key=bool(provider and provider.apiKey),
-                base_url=provider.baseUrl if provider else None,
-                organization=provider.organization if provider else None,
-                is_default=config.agents.defaults.provider == name,
-            )
-        )
+    for name in SUPPORTED_PROVIDERS:
+        summaries.append(_load_provider_summary(config, name))
     return summaries
+
+
+def _ensure_supported_provider_name(name: str) -> None:
+    """Exit with a readable error when the provider name is unsupported."""
+    if name not in SUPPORTED_PROVIDERS:
+        choices = ", ".join(SUPPORTED_PROVIDERS)
+        console.print(f"[red]Error:[/red] Unsupported provider. Choose from: {choices}")
+        raise typer.Exit(1)
+
+
+def _load_provider_config(config, name: str) -> ProviderConfig | None:
+    """Return one provider config after validating the provider name."""
+    _ensure_supported_provider_name(name)
+    return getattr(config.providers, name, None)
+
+
+def _load_provider_summary(config, name: str):
+    """Build one provider summary from the current config."""
+    provider = _load_provider_config(config, name)
+    return build_provider_summary(
+        name=name,
+        configured=provider is not None,
+        has_api_key=bool(provider and provider.apiKey),
+        base_url=provider.baseUrl if provider else None,
+        organization=provider.organization if provider else None,
+        is_default=config.agents.defaults.provider == name,
+    )
+
+
+def _ensure_provider_has_api_key(name: str, provider: ProviderConfig | None) -> None:
+    """Require an API key before a provider can become the default."""
+    if provider is None or not provider.apiKey:
+        console.print(f"[red]Error:[/red] Provider '{name}' must have an API key before it can become the default.")
+        raise typer.Exit(1)
+
+
+def _choose_replacement_default(config, *, removed_provider: str) -> str | None:
+    """Pick another configured provider with an API key as the replacement default."""
+    for candidate in SUPPORTED_PROVIDERS:
+        if candidate == removed_provider:
+            continue
+        provider = getattr(config.providers, candidate, None)
+        if provider and provider.apiKey:
+            return candidate
+    return None
 
 
 def _build_workspace_summary() -> object:
