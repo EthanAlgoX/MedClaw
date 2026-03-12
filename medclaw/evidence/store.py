@@ -585,6 +585,7 @@ class EvidenceStore:
     def filter_collection_records(
         self,
         *,
+        query: str | None = None,
         only_stale: bool = False,
         stale_days_min: int | None = None,
         only_unhealthy: bool = False,
@@ -597,12 +598,30 @@ class EvidenceStore:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Filter collection aggregate records by health-oriented triage criteria."""
+        lowered = query.lower().strip() if query else ""
         normalized_missing_workflow = missing_workflow.strip().lower() if missing_workflow else ""
         normalized_owner = owner.strip().lower() if owner else ""
         normalized_disease_area = disease_area.strip().lower() if disease_area else ""
         records = self.list_collection_records(limit=1000)
         filtered = []
         for record in records:
+            if lowered:
+                haystack = " ".join(
+                    [
+                        record["collection"],
+                        record["objective"],
+                        record["owner"],
+                        record["disease_area"],
+                        " ".join(record["tags"]),
+                        " ".join(record["preferred_workflows"]),
+                        " ".join(record["workflows"]),
+                        " ".join(record["titles"]),
+                        " ".join(record["health_signals"]),
+                        " ".join(record["missing_preferred_workflows"]),
+                    ]
+                ).lower()
+                if lowered not in haystack:
+                    continue
             if only_stale and not record["stale"]:
                 continue
             if stale_days_min is not None:
@@ -634,6 +653,7 @@ class EvidenceStore:
     def filter_collection_record_models(
         self,
         *,
+        query: str | None = None,
         only_stale: bool = False,
         stale_days_min: int | None = None,
         only_unhealthy: bool = False,
@@ -648,6 +668,7 @@ class EvidenceStore:
         """Filter collection aggregate records as typed models."""
         return collection_records_from_dicts(
             self.filter_collection_records(
+                query=query,
                 only_stale=only_stale,
                 stale_days_min=stale_days_min,
                 only_unhealthy=only_unhealthy,
@@ -782,6 +803,7 @@ class EvidenceStore:
     def list_collection_dashboard_models(
         self,
         *,
+        query: str | None = None,
         only_stale: bool = False,
         stale_days_min: int | None = None,
         only_unhealthy: bool = False,
@@ -797,6 +819,7 @@ class EvidenceStore:
     ) -> list[CollectionDashboard]:
         """List collection dashboards under triage-oriented filters."""
         records = self.filter_collection_record_models(
+            query=query,
             only_stale=only_stale,
             stale_days_min=stale_days_min,
             only_unhealthy=only_unhealthy,

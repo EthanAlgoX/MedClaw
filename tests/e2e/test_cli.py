@@ -2138,6 +2138,32 @@ class TestCLI:
             text=True,
             timeout=10,
         )
+        searched_result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "collections",
+                "--search",
+                "thoracic",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        searched_dashboard_result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "dashboards",
+                "--search",
+                "coverage review",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
 
         assert stale_result.returncode == 0
         stale_payload = json.loads(stale_result.stdout)
@@ -2175,6 +2201,15 @@ class TestCLI:
 
         assert sorted_text_result.returncode == 0
         assert "sort_by=name" in sorted_text_result.stdout
+
+        assert searched_result.returncode == 0
+        searched_payload = json.loads(searched_result.stdout)
+        assert [item["collection"] for item in searched_payload["items"]] == ["Gap Program"]
+
+        assert searched_dashboard_result.returncode == 0
+        searched_dashboard_payload = json.loads(searched_dashboard_result.stdout)
+        assert searched_dashboard_payload["filters"]["query"] == "coverage review"
+        assert [item["collection"]["collection"] for item in searched_dashboard_payload["items"]] == ["Gap Program"]
 
     def test_research_collection_set_and_show_commands_manage_manifest(self, tmp_path, monkeypatch):
         """Research collection manifest commands should create and retrieve project metadata."""

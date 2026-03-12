@@ -361,6 +361,7 @@ def research_latest(
 
 @research_app.command("collections")
 def research_collections(
+    search: str | None = typer.Option(None, "--search", help="Filter collections by text."),
     only_stale: bool = typer.Option(
         False,
         "--only-stale",
@@ -413,6 +414,7 @@ def research_collections(
     """List named research collections."""
     store = get_evidence_store()
     records = store.filter_collection_record_models(
+        query=search,
         only_stale=only_stale,
         stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,
@@ -433,6 +435,8 @@ def research_collections(
         return
 
     filter_suffix = []
+    if search:
+        filter_suffix.append(f"search={search}")
     if only_stale:
         filter_suffix.append("only_stale")
     if stale_days_min is not None:
@@ -562,6 +566,7 @@ def research_dashboard(
 
 @research_app.command("dashboards")
 def research_dashboards(
+    search: str | None = typer.Option(None, "--search", help="Filter dashboards by text."),
     only_stale: bool = typer.Option(
         False,
         "--only-stale",
@@ -642,6 +647,7 @@ def research_dashboards(
         raise typer.Exit(1)
     fetch_limit = max(limit, top or 0)
     filters = build_collection_dashboard_query_filters(
+        query=search,
         only_stale=only_stale,
         stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,
@@ -657,6 +663,7 @@ def research_dashboards(
         timeline_limit=timeline_limit,
     )
     dashboards = store.list_collection_dashboard_models(
+        query=search,
         only_stale=only_stale,
         stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,

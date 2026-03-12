@@ -298,6 +298,7 @@ def build_collection_dashboard_response(dashboard: CollectionDashboard) -> Colle
 
 def build_collection_dashboard_query_filters(
     *,
+    query: str | None = None,
     only_stale: bool = False,
     stale_days_min: int | None = None,
     only_unhealthy: bool = False,
@@ -314,6 +315,7 @@ def build_collection_dashboard_query_filters(
 ) -> CollectionDashboardQueryFilters:
     """Build typed collection dashboard filter metadata."""
     return CollectionDashboardQueryFilters(
+        query=query,
         only_stale=only_stale,
         stale_days_min=stale_days_min,
         only_unhealthy=only_unhealthy,

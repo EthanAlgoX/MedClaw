@@ -278,6 +278,7 @@ class CollectionDashboardResponse(BaseModel):
 class CollectionDashboardQueryFilters(BaseModel):
     """Query filters applied to collection dashboard listing endpoints."""
 
+    query: str | None = None
     only_stale: bool = False
     stale_days_min: int | None = None
     only_unhealthy: bool = False

@@ -707,6 +707,12 @@ class TestEvidenceStore:
         )
         health_sorted_records = store.filter_collection_record_models(sort_by="health", limit=10)
         name_sorted_records = store.filter_collection_record_models(sort_by="name", limit=10)
+        searched_records = store.filter_collection_record_models(query="biomarker", limit=10)
+        searched_dashboards = store.list_collection_dashboard_models(
+            query="healthy review",
+            limit=10,
+            timeline_limit=1,
+        )
 
         assert [record.collection for record in stale_records] == ["Dormant Program"]
         assert {record.collection for record in unhealthy_records} == {
@@ -731,6 +737,8 @@ class TestEvidenceStore:
             "Gap Program",
             "Healthy Program",
         ]
+        assert [record.collection for record in searched_records] == ["Gap Program"]
+        assert [dashboard.collection.collection for dashboard in searched_dashboards] == ["Healthy Program"]
 
     def test_read_artifact_returns_structured_payloads(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
