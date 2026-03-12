@@ -5,6 +5,8 @@ from medclaw.application.responses import (
     build_artifact_payload_list_response,
     build_artifact_payload_response,
     build_artifact_query_filters,
+    build_collection_dashboard_list_response,
+    build_collection_dashboard_query_filters,
     build_collection_dashboard_response,
     build_collection_list_response,
     build_collection_response,
@@ -145,6 +147,35 @@ class TestApplicationResponses:
 
         assert response.model_dump(mode="json")["item"]["collection"]["collection"] == "KRAS Program"
         assert response.model_dump(mode="json")["item"]["stale"] is False
+
+    def test_build_collection_dashboard_list_response(self):
+        dashboard = CollectionDashboard(
+            collection=collection_record_from_dict(
+                {
+                    "collection": "Dormant Program",
+                    "slug": "dormant-program",
+                    "report_count": 1,
+                    "workflows": ["literature_review"],
+                    "titles": ["Legacy Review"],
+                }
+            ),
+            covered_workflows=["literature_review"],
+            latest_activity_at="2025-01-01T09:00:00+00:00",
+            stale=True,
+            stale_days=60,
+            health_signals=["stale_collection"],
+        )
+
+        filters = build_collection_dashboard_query_filters(
+            only_stale=True,
+            only_unhealthy=True,
+            limit=5,
+            timeline_limit=3,
+        )
+        response = build_collection_dashboard_list_response([dashboard], filters)
+
+        assert response.model_dump(mode="json")["items"][0]["collection"]["collection"] == "Dormant Program"
+        assert response.model_dump(mode="json")["filters"]["only_stale"] is True
 
     def test_build_artifact_responses(self):
         filters = build_artifact_query_filters(kind="report", latest=True, limit=1)

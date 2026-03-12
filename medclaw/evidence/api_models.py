@@ -275,6 +275,24 @@ class CollectionDashboardResponse(BaseModel):
     item: CollectionDashboard
 
 
+class CollectionDashboardQueryFilters(BaseModel):
+    """Query filters applied to collection dashboard listing endpoints."""
+
+    only_stale: bool = False
+    only_unhealthy: bool = False
+    missing_workflow: str | None = None
+    limit: int = 50
+    timeline_limit: int = 10
+
+
+class CollectionDashboardListResponse(BaseModel):
+    """Typed collection dashboard list response."""
+
+    items: list[CollectionDashboard]
+    total: int
+    filters: CollectionDashboardQueryFilters
+
+
 def artifact_record_from_dict(record: dict[str, Any]) -> ArtifactRecord:
     """Validate one artifact record."""
     return _ARTIFACT_RECORD_ADAPTER.validate_python(record)

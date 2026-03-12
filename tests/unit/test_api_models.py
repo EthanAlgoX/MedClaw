@@ -4,6 +4,8 @@ from medclaw.evidence.api_models import (
     ArtifactListResponse,
     ArtifactPayloadResponse,
     ArtifactQueryFilters,
+    CollectionDashboardListResponse,
+    CollectionDashboardQueryFilters,
     CollectionDashboardResponse,
     CollectionListResponse,
     CollectionResponse,
@@ -250,3 +252,34 @@ class TestArtifactApiModels:
         assert response.model_dump(mode="json")["item"]["health_signals"] == [
             "missing_preferred_workflow:evidence_brief"
         ]
+
+    def test_collection_dashboard_list_response_models_dump_envelopes(self):
+        filters = CollectionDashboardQueryFilters(only_unhealthy=True, limit=5, timeline_limit=3)
+        response = CollectionDashboardListResponse(
+            items=[
+                {
+                    "collection": {
+                        "collection": "Dormant Program",
+                        "slug": "dormant-program",
+                        "report_count": 1,
+                        "workflows": ["literature_review"],
+                        "titles": ["Legacy Review"],
+                    },
+                    "latest_report": None,
+                    "latest_bundle": None,
+                    "latest_run": None,
+                    "timeline": [],
+                    "covered_workflows": ["literature_review"],
+                    "missing_preferred_workflows": [],
+                    "latest_activity_at": "2025-01-01T09:00:00+00:00",
+                    "stale": True,
+                    "stale_days": 60,
+                    "health_signals": ["stale_collection"],
+                }
+            ],
+            total=1,
+            filters=filters,
+        )
+
+        assert response.model_dump(mode="json")["items"][0]["collection"]["slug"] == "dormant-program"
+        assert response.model_dump(mode="json")["filters"]["only_unhealthy"] is True

@@ -27,6 +27,8 @@ from medclaw.evidence.api_models import (
     CollectionResponse,
     CollectionDashboard,
     CollectionDashboardResponse,
+    CollectionDashboardListResponse,
+    CollectionDashboardQueryFilters,
     ResearchRunListResponse,
     ResearchRunQueryFilters,
     ResearchRunRecord,
@@ -290,6 +292,32 @@ def build_collection_response(record: CollectionRecord | CollectionManifest) -> 
 def build_collection_dashboard_response(dashboard: CollectionDashboard) -> CollectionDashboardResponse:
     """Build a typed collection dashboard response."""
     return CollectionDashboardResponse(item=dashboard)
+
+
+def build_collection_dashboard_query_filters(
+    *,
+    only_stale: bool = False,
+    only_unhealthy: bool = False,
+    missing_workflow: str | None = None,
+    limit: int = 50,
+    timeline_limit: int = 10,
+) -> CollectionDashboardQueryFilters:
+    """Build typed collection dashboard filter metadata."""
+    return CollectionDashboardQueryFilters(
+        only_stale=only_stale,
+        only_unhealthy=only_unhealthy,
+        missing_workflow=missing_workflow,
+        limit=limit,
+        timeline_limit=timeline_limit,
+    )
+
+
+def build_collection_dashboard_list_response(
+    dashboards: list[CollectionDashboard],
+    filters: CollectionDashboardQueryFilters,
+) -> CollectionDashboardListResponse:
+    """Build a typed collection dashboard list response."""
+    return CollectionDashboardListResponse(items=dashboards, total=len(dashboards), filters=filters)
 
 
 def build_workflow_summary(record: dict[str, str]) -> WorkflowSummary:

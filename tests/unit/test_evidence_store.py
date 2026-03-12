@@ -275,6 +275,51 @@ class TestEvidenceStore:
         assert "no_run" in dashboard.health_signals
         assert "stale_collection" in dashboard.health_signals
 
+    def test_list_collection_dashboard_models_supports_triage_filters(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Track stale activity",
+            preferred_workflows=["literature_review"],
+        )
+        store.save_collection_manifest(
+            name="Gap Program",
+            objective="Track workflow coverage",
+            preferred_workflows=["evidence_brief"],
+        )
+
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Legacy topic",
+                title="Legacy Review",
+                summary="Summary",
+                generated_at="2025-01-01T09:00:00+00:00",
+                metadata={"collection": "Dormant Program"},
+            )
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Coverage topic",
+                title="Coverage Review",
+                summary="Summary",
+                generated_at="2026-03-08T09:00:00+00:00",
+                metadata={"collection": "Gap Program"},
+            )
+        )
+
+        dashboards = store.list_collection_dashboard_models(
+            only_unhealthy=True,
+            missing_workflow="evidence_brief",
+            limit=10,
+            timeline_limit=2,
+        )
+
+        assert [dashboard.collection.collection for dashboard in dashboards] == ["Gap Program"]
+        assert dashboards[0].missing_preferred_workflows == ["evidence_brief"]
+        assert len(dashboards[0].timeline) <= 2
+
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
         report = ResearchReport(

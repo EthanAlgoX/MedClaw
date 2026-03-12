@@ -842,6 +842,85 @@ class TestCLI:
         assert "stale: yes" in text_result.stdout
         assert "health signals:" in text_result.stdout
 
+    def test_research_dashboards_command_lists_filtered_collection_views(self, tmp_path, monkeypatch):
+        """Research dashboards should expose filtered multi-collection health views."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        store = EvidenceStore(test_home / ".medclaw" / "workspace")
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Track stale activity",
+            preferred_workflows=["literature_review"],
+        )
+        store.save_collection_manifest(
+            name="Gap Program",
+            objective="Track workflow coverage",
+            preferred_workflows=["evidence_brief"],
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Legacy Review",
+            question="Legacy topic",
+            summary="Summary",
+            generated_at="2025-01-01T09:00:00+00:00",
+            collection="Dormant Program",
+        )
+        self._seed_report_with_fields(
+            test_home,
+            workflow_id="literature_review",
+            title="Coverage Review",
+            question="Coverage topic",
+            summary="Summary",
+            generated_at="2026-03-08T09:00:00+00:00",
+            collection="Gap Program",
+        )
+        monkeypatch.setenv("HOME", str(test_home))
+
+        result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "dashboards",
+                "--only-unhealthy",
+                "--missing-workflow",
+                "evidence_brief",
+                "--timeline-limit",
+                "2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        text_result = subprocess.run(
+            [
+                "medclaw",
+                "research",
+                "dashboards",
+                "--only-unhealthy",
+                "--missing-workflow",
+                "evidence_brief",
+                "--timeline-limit",
+                "2",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert result.returncode == 0
+        payload = json.loads(result.stdout)
+        assert payload["total"] == 1
+        assert payload["items"][0]["collection"]["collection"] == "Gap Program"
+        assert payload["items"][0]["missing_preferred_workflows"] == ["evidence_brief"]
+        assert payload["filters"]["timeline_limit"] == 2
+
+        assert text_result.returncode == 0
+        assert "Collection Dashboards:" in text_result.stdout
+        assert "Gap Program" in text_result.stdout
+        assert "missing preferred: evidence_brief" in text_result.stdout
+
     def test_research_runs_command_lists_saved_runs(self, tmp_path, monkeypatch):
         """Research runs command should expose typed saved run records."""
         test_home = tmp_path / "test_home"

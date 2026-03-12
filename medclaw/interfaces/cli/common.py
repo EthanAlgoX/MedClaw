@@ -512,6 +512,38 @@ def emit_collection_dashboard(
             console.print(f"  - {event_date} ({timeline_record.kind}) {timeline_record.title}")
 
 
+def emit_collection_dashboard_list(dashboards: list[CollectionDashboard]) -> None:
+    """Render a compact multi-collection dashboard view."""
+    if not dashboards:
+        console.print("[yellow]No collection dashboards matched the current filters.[/yellow]")
+        return
+
+    console.print("[bold]Collection Dashboards:[/bold]")
+    for dashboard in dashboards:
+        record = dashboard.collection
+        latest = dashboard.latest_activity_at.split("T", 1)[0] if dashboard.latest_activity_at else "n/a"
+        status = f"stale ({dashboard.stale_days} days)" if dashboard.stale else (
+            f"active ({dashboard.stale_days} days)" if dashboard.stale_days is not None else "unknown"
+        )
+        console.print(
+            "  - "
+            f"{record.collection} latest={latest} status={status} "
+            f"reports={record.report_count} workflows={len(dashboard.covered_workflows)}"
+        )
+        if dashboard.latest_run is not None:
+            console.print(f"      latest run: {dashboard.latest_run.id}")
+        if dashboard.latest_report is not None:
+            console.print(f"      latest report: {dashboard.latest_report.title}")
+        if dashboard.latest_bundle is not None:
+            console.print(f"      latest bundle: {dashboard.latest_bundle.path}")
+        if dashboard.missing_preferred_workflows:
+            console.print(
+                f"      missing preferred: {', '.join(dashboard.missing_preferred_workflows)}"
+            )
+        if dashboard.health_signals:
+            console.print(f"      health: {', '.join(dashboard.health_signals)}")
+
+
 def emit_research_run(run: ResearchRun) -> None:
     """Render a saved research run in a compact operator-friendly format."""
     started = run.started_at.split("T", 1)[0] if run.started_at else "n/a"

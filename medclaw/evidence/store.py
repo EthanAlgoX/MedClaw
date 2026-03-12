@@ -748,6 +748,27 @@ class EvidenceStore:
             health_signals=health_signals,
         )
 
+    def list_collection_dashboard_models(
+        self,
+        *,
+        only_stale: bool = False,
+        only_unhealthy: bool = False,
+        missing_workflow: str | None = None,
+        limit: int = 50,
+        timeline_limit: int = 10,
+    ) -> list[CollectionDashboard]:
+        """List collection dashboards under triage-oriented filters."""
+        records = self.filter_collection_record_models(
+            only_stale=only_stale,
+            only_unhealthy=only_unhealthy,
+            missing_workflow=missing_workflow,
+            limit=limit,
+        )
+        return [
+            self.get_collection_dashboard_model(record.slug, timeline_limit=timeline_limit)
+            for record in records
+        ]
+
     def save_collection_bundle_artifacts(
         self,
         reports: list[ResearchReport],

@@ -11,6 +11,8 @@ from medclaw.application import (
     build_artifact_list_response,
     build_artifact_payload_list_response,
     build_artifact_payload_response,
+    build_collection_dashboard_list_response,
+    build_collection_dashboard_query_filters,
     build_artifact_query_filters,
     build_collection_dashboard_response,
     build_collection_list_response,
@@ -33,6 +35,7 @@ from medclaw.interfaces.cli.common import (
     emit_artifact_record,
     emit_artifact_record_list,
     emit_collection_dashboard,
+    emit_collection_dashboard_list,
     emit_collection_manifest,
     emit_research_run,
     emit_research_run_record_list,
@@ -494,6 +497,51 @@ def research_dashboard(
         return
 
     emit_collection_dashboard(dashboard)
+
+
+@research_app.command("dashboards")
+def research_dashboards(
+    only_stale: bool = typer.Option(
+        False,
+        "--only-stale",
+        help="Only include collections with stale activity.",
+    ),
+    only_unhealthy: bool = typer.Option(
+        False,
+        "--only-unhealthy",
+        help="Only include collections with health signals.",
+    ),
+    missing_workflow: str | None = typer.Option(
+        None,
+        "--missing-workflow",
+        help="Only include collections missing a preferred workflow.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
+    timeline_limit: int = typer.Option(5, "--timeline-limit", min=1, help="Maximum timeline events per collection."),
+):
+    """List collection dashboards for triage-oriented operations."""
+    store = get_evidence_store()
+    filters = build_collection_dashboard_query_filters(
+        only_stale=only_stale,
+        only_unhealthy=only_unhealthy,
+        missing_workflow=missing_workflow,
+        limit=limit,
+        timeline_limit=timeline_limit,
+    )
+    dashboards = store.list_collection_dashboard_models(
+        only_stale=only_stale,
+        only_unhealthy=only_unhealthy,
+        missing_workflow=missing_workflow,
+        limit=limit,
+        timeline_limit=timeline_limit,
+    )
+
+    if as_json:
+        write_json(build_collection_dashboard_list_response(dashboards, filters))
+        return
+
+    emit_collection_dashboard_list(dashboards)
 
 
 @research_app.command("runs")
