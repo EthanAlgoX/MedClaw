@@ -237,6 +237,94 @@ class TestCLI:
         assert config_payload["providers"]["deepseek"]["apiKey"] == "test-key"
         assert config_payload["agents"]["defaults"]["provider"] == "deepseek"
 
+    def test_system_config_set_commands_update_defaults(self, tmp_path, monkeypatch):
+        """Model, temperature, max tokens, and workspace setters should persist config."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+        workspace_path = test_home / "custom-workspace"
+
+        model_result = subprocess.run(
+            ["medclaw", "system", "model-set", "deepseek-chat", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        temperature_result = subprocess.run(
+            ["medclaw", "system", "temperature-set", "0.3", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        max_tokens_result = subprocess.run(
+            ["medclaw", "system", "max-tokens-set", "2048", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        workspace_result = subprocess.run(
+            ["medclaw", "system", "workspace-set", str(workspace_path), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        workspace_show_result = subprocess.run(
+            ["medclaw", "system", "workspace", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert model_result.returncode == 0
+        assert json.loads(model_result.stdout)["item"]["default_model"] == "deepseek-chat"
+
+        assert temperature_result.returncode == 0
+        assert json.loads(temperature_result.stdout)["item"]["temperature"] == 0.3
+
+        assert max_tokens_result.returncode == 0
+        assert json.loads(max_tokens_result.stdout)["item"]["max_tokens"] == 2048
+
+        assert workspace_result.returncode == 0
+        workspace_payload = json.loads(workspace_result.stdout)
+        assert workspace_payload["item"]["workspace"]["path"] == str(workspace_path)
+
+        assert workspace_show_result.returncode == 0
+        workspace_show_payload = json.loads(workspace_show_result.stdout)
+        assert workspace_show_payload["item"]["path"] == str(workspace_path)
+        assert (workspace_path / "research" / "collections").exists()
+
+        config_path = test_home / ".medclaw" / "config.json"
+        config_payload = json.loads(config_path.read_text(encoding="utf-8"))
+        assert config_payload["agents"]["defaults"]["model"] == "deepseek-chat"
+        assert config_payload["agents"]["defaults"]["temperature"] == 0.3
+        assert config_payload["agents"]["defaults"]["maxTokens"] == 2048
+        assert config_payload["workspace"]["path"] == str(workspace_path)
+
+    def test_system_config_set_commands_validate_input(self, tmp_path, monkeypatch):
+        """Config setter commands should reject invalid values."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        temperature_result = subprocess.run(
+            ["medclaw", "system", "temperature-set", "2.5"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        max_tokens_result = subprocess.run(
+            ["medclaw", "system", "max-tokens-set", "0"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert temperature_result.returncode == 1
+        assert "Temperature must be between 0 and 2" in temperature_result.stdout
+
+        assert max_tokens_result.returncode == 1
+        assert "Max tokens must be greater than 0" in max_tokens_result.stdout
+
     def test_system_provider_show_and_default_commands_support_json(self, tmp_path, monkeypatch):
         """Provider show/default commands should expose typed JSON responses."""
         test_home = tmp_path / "test_home"

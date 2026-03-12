@@ -17,6 +17,15 @@ def get_default_config_path() -> Path:
 
 def get_workspace_path() -> Path:
     """Get workspace path."""
+    config_path = get_default_config_path()
+    if config_path.exists():
+        try:
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            workspace = data.get("workspace", {}).get("path")
+            if workspace:
+                return Path(workspace)
+        except Exception:
+            pass
     return Path.home() / ".medclaw" / "workspace"
 
 

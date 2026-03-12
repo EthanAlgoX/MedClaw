@@ -243,17 +243,7 @@ def system_config(
 ):
     """Show configuration summary."""
     config = load_config()
-    workspace_summary = _build_workspace_summary()
-    providers = _build_provider_summaries(config)
-    response = build_config_response(
-        config_path=str(get_default_config_path()),
-        workspace=workspace_summary,
-        default_provider=config.agents.defaults.provider,
-        default_model=config.agents.defaults.model,
-        temperature=config.agents.defaults.temperature,
-        max_tokens=config.agents.defaults.maxTokens,
-        providers=providers,
-    )
+    response = _build_config_response(config)
     if as_json:
         _write_json(response)
         return
@@ -265,6 +255,64 @@ def system_config(
     console.print(f"temperature: {response.item.temperature}")
     console.print(f"max tokens: {response.item.max_tokens}")
     console.print(f"workspace: {response.item.workspace.path}")
+
+
+@system_app.command("model-set")
+def system_model_set(
+    model: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Update the default model."""
+    config = load_config()
+    config.agents.defaults.model = model
+    save_config(config)
+    _emit_config_response(config, as_json=as_json)
+
+
+@system_app.command("temperature-set")
+def system_temperature_set(
+    temperature: float,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Update the default sampling temperature."""
+    if temperature < 0 or temperature > 2:
+        console.print("[red]Error:[/red] Temperature must be between 0 and 2.")
+        raise typer.Exit(1)
+
+    config = load_config()
+    config.agents.defaults.temperature = temperature
+    save_config(config)
+    _emit_config_response(config, as_json=as_json)
+
+
+@system_app.command("max-tokens-set")
+def system_max_tokens_set(
+    max_tokens: int,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Update the default max tokens."""
+    if max_tokens <= 0:
+        console.print("[red]Error:[/red] Max tokens must be greater than 0.")
+        raise typer.Exit(1)
+
+    config = load_config()
+    config.agents.defaults.maxTokens = max_tokens
+    save_config(config)
+    _emit_config_response(config, as_json=as_json)
+
+
+@system_app.command("workspace-set")
+def system_workspace_set(
+    path: Path,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Update the configured workspace path."""
+    workspace_path = path.expanduser()
+    config = load_config()
+    config.workspace.path = workspace_path
+    save_config(config)
+    ensure_workspace(workspace_path)
+    _emit_config_response(config, as_json=as_json)
 
 
 @system_app.command("provider-show")
@@ -411,6 +459,36 @@ def _build_provider_summaries(config) -> list:
     for name in SUPPORTED_PROVIDERS:
         summaries.append(_load_provider_summary(config, name))
     return summaries
+
+
+def _build_config_response(config):
+    """Build a typed config response for the current config state."""
+    workspace_summary = _build_workspace_summary()
+    providers = _build_provider_summaries(config)
+    return build_config_response(
+        config_path=str(get_default_config_path()),
+        workspace=workspace_summary,
+        default_provider=config.agents.defaults.provider,
+        default_model=config.agents.defaults.model,
+        temperature=config.agents.defaults.temperature,
+        max_tokens=config.agents.defaults.maxTokens,
+        providers=providers,
+    )
+
+
+def _emit_config_response(config, *, as_json: bool) -> None:
+    """Render a config response in text or JSON form."""
+    response = _build_config_response(config)
+    if as_json:
+        _write_json(response)
+        return
+
+    console.print("[bold]Config updated:[/bold]")
+    console.print(f"default provider: {response.item.default_provider}")
+    console.print(f"default model: {response.item.default_model}")
+    console.print(f"temperature: {response.item.temperature}")
+    console.print(f"max tokens: {response.item.max_tokens}")
+    console.print(f"workspace: {response.item.workspace.path}")
 
 
 def _ensure_supported_provider_name(name: str) -> None:
