@@ -885,6 +885,8 @@ class TestCLI:
                 "--only-unhealthy",
                 "--missing-workflow",
                 "evidence_brief",
+                "--sort-by",
+                "health",
                 "--timeline-limit",
                 "2",
                 "--json",
@@ -901,6 +903,8 @@ class TestCLI:
                 "--only-unhealthy",
                 "--missing-workflow",
                 "evidence_brief",
+                "--sort-by",
+                "health",
                 "--timeline-limit",
                 "2",
             ],
@@ -914,10 +918,12 @@ class TestCLI:
         assert payload["total"] == 1
         assert payload["items"][0]["collection"]["collection"] == "Gap Program"
         assert payload["items"][0]["missing_preferred_workflows"] == ["evidence_brief"]
+        assert payload["filters"]["sort_by"] == "health"
         assert payload["filters"]["timeline_limit"] == 2
 
         assert text_result.returncode == 0
-        assert "Collection Dashboards:" in text_result.stdout
+        assert "Collection Dashboards" in text_result.stdout
+        assert "sort=health" in text_result.stdout
         assert "Gap Program" in text_result.stdout
         assert "missing preferred: evidence_brief" in text_result.stdout
 

@@ -512,13 +512,17 @@ def emit_collection_dashboard(
             console.print(f"  - {event_date} ({timeline_record.kind}) {timeline_record.title}")
 
 
-def emit_collection_dashboard_list(dashboards: list[CollectionDashboard]) -> None:
+def emit_collection_dashboard_list(
+    dashboards: list[CollectionDashboard],
+    *,
+    sort_by: str = "activity",
+) -> None:
     """Render a compact multi-collection dashboard view."""
     if not dashboards:
         console.print("[yellow]No collection dashboards matched the current filters.[/yellow]")
         return
 
-    console.print("[bold]Collection Dashboards:[/bold]")
+    console.print(f"[bold]Collection Dashboards[/bold] (sort={sort_by}):")
     for dashboard in dashboards:
         record = dashboard.collection
         latest = dashboard.latest_activity_at.split("T", 1)[0] if dashboard.latest_activity_at else "n/a"

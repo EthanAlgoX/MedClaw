@@ -320,6 +320,94 @@ class TestEvidenceStore:
         assert dashboards[0].missing_preferred_workflows == ["evidence_brief"]
         assert len(dashboards[0].timeline) <= 2
 
+    def test_list_collection_dashboard_models_supports_sorting(self, temp_workspace: Path):
+        store = EvidenceStore(temp_workspace)
+        store.save_collection_manifest(
+            name="Stable Program",
+            objective="Healthy active project",
+            preferred_workflows=["literature_review"],
+        )
+        store.save_collection_manifest(
+            name="Gap Program",
+            objective="Missing preferred workflow",
+            preferred_workflows=["evidence_brief"],
+        )
+        store.save_collection_manifest(
+            name="Dormant Program",
+            objective="Stale inactive project",
+            preferred_workflows=["literature_review"],
+        )
+
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Stable topic",
+                title="Stable Review",
+                summary="Summary",
+                generated_at="2026-03-10T09:00:00+00:00",
+                metadata={"collection": "Stable Program"},
+            )
+        )
+        store.save_run(
+            ResearchRun(
+                id="run-stable",
+                query="Stable topic",
+                collection="Stable Program",
+                started_at="2026-03-10T09:00:00+00:00",
+                completed_at="2026-03-10T09:00:00+00:00",
+                workflow_runs=[
+                    WorkflowRun(workflow_id="literature_review", question="Stable topic"),
+                ],
+            )
+        )
+        store.save_collection_bundle_artifacts(
+            reports=[
+                ResearchReport(
+                    workflow_id="literature_review",
+                    question="Stable topic",
+                    title="Stable Review",
+                    summary="Summary",
+                    metadata={"collection": "Stable Program"},
+                )
+            ],
+            markdown_summary="# Collection Brief: Stable Program",
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Gap topic",
+                title="Gap Review",
+                summary="Summary",
+                generated_at="2026-03-09T09:00:00+00:00",
+                metadata={"collection": "Gap Program"},
+            )
+        )
+        store.save_report_artifacts(
+            ResearchReport(
+                workflow_id="literature_review",
+                question="Dormant topic",
+                title="Dormant Review",
+                summary="Summary",
+                generated_at="2025-01-01T09:00:00+00:00",
+                metadata={"collection": "Dormant Program"},
+            )
+        )
+
+        health_sorted = store.list_collection_dashboard_models(sort_by="health", limit=10, timeline_limit=1)
+        coverage_sorted = store.list_collection_dashboard_models(sort_by="coverage", limit=10, timeline_limit=1)
+        name_sorted = store.list_collection_dashboard_models(sort_by="name", limit=10, timeline_limit=1)
+
+        assert [dashboard.collection.collection for dashboard in health_sorted[:2]] == [
+            "Dormant Program",
+            "Gap Program",
+        ]
+        assert coverage_sorted[0].collection.collection == "Gap Program"
+        assert [dashboard.collection.collection for dashboard in name_sorted] == [
+            "Dormant Program",
+            "Gap Program",
+            "Stable Program",
+        ]
+
     def test_save_report_artifacts_writes_companion_files(self, temp_workspace: Path):
         store = EvidenceStore(temp_workspace)
         report = ResearchReport(

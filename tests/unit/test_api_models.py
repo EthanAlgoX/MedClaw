@@ -254,7 +254,12 @@ class TestArtifactApiModels:
         ]
 
     def test_collection_dashboard_list_response_models_dump_envelopes(self):
-        filters = CollectionDashboardQueryFilters(only_unhealthy=True, limit=5, timeline_limit=3)
+        filters = CollectionDashboardQueryFilters(
+            only_unhealthy=True,
+            sort_by="health",
+            limit=5,
+            timeline_limit=3,
+        )
         response = CollectionDashboardListResponse(
             items=[
                 {
@@ -283,3 +288,4 @@ class TestArtifactApiModels:
 
         assert response.model_dump(mode="json")["items"][0]["collection"]["slug"] == "dormant-program"
         assert response.model_dump(mode="json")["filters"]["only_unhealthy"] is True
+        assert response.model_dump(mode="json")["filters"]["sort_by"] == "health"

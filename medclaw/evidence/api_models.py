@@ -281,6 +281,7 @@ class CollectionDashboardQueryFilters(BaseModel):
     only_stale: bool = False
     only_unhealthy: bool = False
     missing_workflow: str | None = None
+    sort_by: Literal["activity", "health", "coverage", "name"] = "activity"
     limit: int = 50
     timeline_limit: int = 10
 

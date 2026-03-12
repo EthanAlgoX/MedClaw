@@ -169,6 +169,7 @@ class TestApplicationResponses:
         filters = build_collection_dashboard_query_filters(
             only_stale=True,
             only_unhealthy=True,
+            sort_by="health",
             limit=5,
             timeline_limit=3,
         )
@@ -176,6 +177,7 @@ class TestApplicationResponses:
 
         assert response.model_dump(mode="json")["items"][0]["collection"]["collection"] == "Dormant Program"
         assert response.model_dump(mode="json")["filters"]["only_stale"] is True
+        assert response.model_dump(mode="json")["filters"]["sort_by"] == "health"
 
     def test_build_artifact_responses(self):
         filters = build_artifact_query_filters(kind="report", latest=True, limit=1)

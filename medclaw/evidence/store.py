@@ -754,6 +754,7 @@ class EvidenceStore:
         only_stale: bool = False,
         only_unhealthy: bool = False,
         missing_workflow: str | None = None,
+        sort_by: str = "activity",
         limit: int = 50,
         timeline_limit: int = 10,
     ) -> list[CollectionDashboard]:
@@ -764,10 +765,11 @@ class EvidenceStore:
             missing_workflow=missing_workflow,
             limit=limit,
         )
-        return [
+        dashboards = [
             self.get_collection_dashboard_model(record.slug, timeline_limit=timeline_limit)
             for record in records
         ]
+        return self._sort_collection_dashboards(dashboards, sort_by=sort_by)[:limit]
 
     def save_collection_bundle_artifacts(
         self,
@@ -1227,6 +1229,53 @@ class EvidenceStore:
             "scope": record.get("scope", ""),
             "summary_preview": "",
         }
+
+    def _sort_collection_dashboards(
+        self,
+        dashboards: list[CollectionDashboard],
+        *,
+        sort_by: str,
+    ) -> list[CollectionDashboard]:
+        """Sort collection dashboards for operator triage workflows."""
+        if sort_by == "activity":
+            return sorted(
+                dashboards,
+                key=lambda dashboard: (
+                    dashboard.latest_activity_at,
+                    dashboard.collection.collection.lower(),
+                ),
+                reverse=True,
+            )
+        if sort_by == "health":
+            return sorted(
+                dashboards,
+                key=lambda dashboard: (
+                    len(dashboard.health_signals),
+                    int(dashboard.stale),
+                    len(dashboard.missing_preferred_workflows),
+                    dashboard.latest_activity_at,
+                    dashboard.collection.collection.lower(),
+                ),
+                reverse=True,
+            )
+        if sort_by == "coverage":
+            return sorted(
+                dashboards,
+                key=lambda dashboard: (
+                    len(dashboard.missing_preferred_workflows),
+                    -len(dashboard.covered_workflows),
+                    len(dashboard.health_signals),
+                    dashboard.latest_activity_at,
+                    dashboard.collection.collection.lower(),
+                ),
+                reverse=True,
+            )
+        if sort_by == "name":
+            return sorted(
+                dashboards,
+                key=lambda dashboard: dashboard.collection.collection.lower(),
+            )
+        raise ValueError(f"Unsupported collection dashboard sort: {sort_by}")
 
     def _latest_collection_activity_timestamp(
         self,

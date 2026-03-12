@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
 
 import typer
 from rich.markdown import Markdown
@@ -516,6 +517,11 @@ def research_dashboards(
         "--missing-workflow",
         help="Only include collections missing a preferred workflow.",
     ),
+    sort_by: Literal["activity", "health", "coverage", "name"] = typer.Option(
+        "activity",
+        "--sort-by",
+        help="Sort by activity, health, coverage, or name.",
+    ),
     as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of collections."),
     timeline_limit: int = typer.Option(5, "--timeline-limit", min=1, help="Maximum timeline events per collection."),
@@ -526,6 +532,7 @@ def research_dashboards(
         only_stale=only_stale,
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
+        sort_by=sort_by,
         limit=limit,
         timeline_limit=timeline_limit,
     )
@@ -533,6 +540,7 @@ def research_dashboards(
         only_stale=only_stale,
         only_unhealthy=only_unhealthy,
         missing_workflow=missing_workflow,
+        sort_by=sort_by,
         limit=limit,
         timeline_limit=timeline_limit,
     )
@@ -541,7 +549,7 @@ def research_dashboards(
         write_json(build_collection_dashboard_list_response(dashboards, filters))
         return
 
-    emit_collection_dashboard_list(dashboards)
+    emit_collection_dashboard_list(dashboards, sort_by=sort_by)
 
 
 @research_app.command("runs")
