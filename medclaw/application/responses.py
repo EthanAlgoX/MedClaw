@@ -5,6 +5,8 @@ from __future__ import annotations
 from medclaw.application.query_models import (
     ConfigResponse,
     ConfigSummary,
+    ExportListResponse,
+    ExportSummary,
     ProviderListResponse,
     ProviderResponse,
     ProviderSummary,
@@ -91,6 +93,7 @@ def build_workspace_summary(
     reports_path: str,
     research_path: str,
     collections_path: str,
+    exports_path: str,
 ) -> WorkspaceSummary:
     """Build a typed workspace summary."""
     return WorkspaceSummary(
@@ -101,6 +104,7 @@ def build_workspace_summary(
         reports_path=reports_path,
         research_path=research_path,
         collections_path=collections_path,
+        exports_path=exports_path,
     )
 
 
@@ -434,3 +438,19 @@ def build_skill_list_response(
 ) -> SkillListResponse:
     """Build a typed skill listing/search response."""
     return SkillListResponse(items=records, total=len(records), query=query)
+
+
+def build_export_summary(record: dict[str, object]) -> ExportSummary:
+    """Build a typed export summary."""
+    return ExportSummary.model_validate(record)
+
+
+def build_export_list_response(
+    records: list[ExportSummary],
+    *,
+    query: str | None = None,
+    kind: str | None = None,
+    latest: bool = False,
+) -> ExportListResponse:
+    """Build a typed export listing response."""
+    return ExportListResponse(items=records, total=len(records), query=query, kind=kind, latest=latest)

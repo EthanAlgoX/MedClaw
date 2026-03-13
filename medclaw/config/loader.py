@@ -62,6 +62,7 @@ def ensure_workspace(workspace_path: Path | None = None) -> Path:
     (workspace_path / "reports").mkdir(exist_ok=True)
     (workspace_path / "research").mkdir(exist_ok=True)
     (workspace_path / "research" / "collections").mkdir(parents=True, exist_ok=True)
+    (workspace_path / "research" / "exports").mkdir(parents=True, exist_ok=True)
     (workspace_path / "research" / "reports").mkdir(parents=True, exist_ok=True)
 
     return workspace_path

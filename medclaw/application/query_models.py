@@ -73,6 +73,7 @@ class WorkspaceSummary(BaseModel):
     reports_path: str
     research_path: str
     collections_path: str
+    exports_path: str
 
 
 class WorkspaceResponse(BaseModel):
@@ -97,3 +98,26 @@ class ConfigResponse(BaseModel):
     """Typed config summary response."""
 
     item: ConfigSummary
+
+
+class ExportSummary(BaseModel):
+    """Compact research export summary."""
+
+    id: str
+    path: str
+    filename: str
+    format: str
+    export_kind: str = ""
+    artifact_id: str = ""
+    generated_at: str = ""
+    size_bytes: int = 0
+
+
+class ExportListResponse(BaseModel):
+    """Typed export listing response."""
+
+    items: list[ExportSummary]
+    total: int
+    query: str | None = None
+    kind: str | None = None
+    latest: bool = False

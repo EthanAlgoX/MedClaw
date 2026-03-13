@@ -18,6 +18,7 @@ from medclaw.application import (
     build_collection_dashboard_response,
     build_collection_list_response,
     build_collection_response,
+    build_export_list_response,
     build_research_run_list_response,
     build_research_run_query_filters,
     build_research_run_response,
@@ -46,10 +47,13 @@ from medclaw.interfaces.cli.common import (
     emit_research_reports,
     get_configured_provider,
     get_evidence_store,
+    get_research_exports_dir,
     get_research_use_cases,
+    list_export_summaries,
     normalize_artifact_option,
     render_collection_dashboard_list_markdown,
     read_show_artifact,
+    resolve_export_path,
     run_research_workflow_report,
     save_json,
     save_text,
@@ -689,7 +693,7 @@ def research_dashboards(
     response = build_collection_dashboard_list_response(dashboards, filters)
 
     if export_json_path:
-        saved_path = save_json(response, export_json_path)
+        saved_path = save_json(response, resolve_export_path(export_json_path))
         if not as_json:
             console.print(f"dashboard export: {saved_path}")
     if export_md_path:
@@ -702,7 +706,7 @@ def research_dashboards(
             filters=filters,
             workspace_path=str(store.workspace),
         )
-        saved_md_path = save_text(markdown, export_md_path)
+        saved_md_path = save_text(markdown, resolve_export_path(export_md_path))
         if not as_json:
             console.print(f"dashboard markdown: {saved_md_path}")
 
@@ -717,6 +721,47 @@ def research_dashboards(
         group_by=normalized_group_by,
         summary=response.summary,
     )
+
+
+@research_app.command("exports")
+def research_exports(
+    search: str | None = typer.Option(None, "--search", help="Filter exports by text."),
+    kind: str | None = typer.Option(None, "--kind", help="Filter by export kind or file format."),
+    latest: bool = typer.Option(False, "--latest", help="Return only the newest matching export."),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of exports."),
+):
+    """List saved research exports from the workspace export directory."""
+    exports_dir = get_research_exports_dir()
+    records = list_export_summaries(query=search, kind=kind, latest=latest, limit=limit)
+
+    if as_json:
+        write_json(build_export_list_response(records, query=search, kind=kind, latest=latest))
+        return
+
+    if not records:
+        console.print("[yellow]No research exports matched the current filters.[/yellow]")
+        return
+
+    filter_suffix = []
+    if search:
+        filter_suffix.append(f"search={search}")
+    if kind:
+        filter_suffix.append(f"kind={kind}")
+    if latest:
+        filter_suffix.append("latest")
+    suffix = f" ({', '.join(filter_suffix)})" if filter_suffix else ""
+
+    console.print(f"[bold]Research Exports{suffix}[/bold] dir={exports_dir}")
+    for record in records:
+        generated_at = record.generated_at.split("T", 1)[0] if record.generated_at else "n/a"
+        console.print(
+            "  - "
+            f"{record.filename} [{record.export_kind}] "
+            f"date={generated_at} size={record.size_bytes}"
+        )
+        console.print(f"      artifact_id: {record.artifact_id}")
+        console.print(f"      path: {record.path}")
 
 
 @research_app.command("runs")

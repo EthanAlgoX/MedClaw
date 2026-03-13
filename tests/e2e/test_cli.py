@@ -206,6 +206,7 @@ class TestCLI:
         payload = json.loads(result.stdout)
         assert payload["item"]["path"].endswith(".medclaw/workspace")
         assert payload["item"]["collections_path"].endswith("research/collections")
+        assert payload["item"]["exports_path"].endswith("research/exports")
 
     def test_system_providers_and_config_commands_support_json(self, tmp_path, monkeypatch):
         """System provider/config commands should expose structured JSON output."""
@@ -931,8 +932,8 @@ class TestCLI:
         """Research dashboards should support top-N summary output and JSON export."""
         test_home = tmp_path / "test_home"
         test_home.mkdir()
-        export_path = tmp_path / "dashboard-export.json"
-        export_md_path = tmp_path / "dashboard-export.md"
+        export_path = "dashboard-export.json"
+        export_md_path = "dashboard-export.md"
         store = EvidenceStore(test_home / ".medclaw" / "workspace")
         store.save_collection_manifest(
             name="Gap Program",
@@ -996,10 +997,12 @@ class TestCLI:
         assert "Translational Team" in result.stdout
         assert "Dormant Program" in result.stdout
         assert "latest run:" not in result.stdout
-        assert export_path.exists()
-        assert export_md_path.exists()
+        resolved_export_path = test_home / ".medclaw" / "workspace" / "research" / "exports" / export_path
+        resolved_export_md_path = test_home / ".medclaw" / "workspace" / "research" / "exports" / export_md_path
+        assert resolved_export_path.exists()
+        assert resolved_export_md_path.exists()
 
-        export_payload = json.loads(export_path.read_text(encoding="utf-8"))
+        export_payload = json.loads(resolved_export_path.read_text(encoding="utf-8"))
         assert export_payload["total"] == 1
         assert export_payload["items"][0]["collection"]["collection"] == "Dormant Program"
         assert export_payload["summary"]["grouped_by"] == "owner"
@@ -1007,7 +1010,7 @@ class TestCLI:
         assert export_payload["filters"]["group_by"] == "owner"
         assert export_payload["filters"]["top"] == 1
 
-        export_markdown = export_md_path.read_text(encoding="utf-8")
+        export_markdown = resolved_export_md_path.read_text(encoding="utf-8")
         assert export_markdown.startswith("---\n")
         assert 'kind: "collection_dashboard_inventory"' in export_markdown
         assert 'artifact_id: "dashboard-inventory-' in export_markdown
@@ -1022,6 +1025,19 @@ class TestCLI:
         assert "## Translational Team" in export_markdown
         assert "### Dormant Program" in export_markdown
         assert "- Health: no_bundle, no_run, stale_collection" in export_markdown
+
+        exports_result = subprocess.run(
+            ["medclaw", "research", "exports", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert exports_result.returncode == 0
+        exports_payload = json.loads(exports_result.stdout)
+        assert exports_payload["total"] >= 2
+        assert any(item["filename"] == "dashboard-export.md" for item in exports_payload["items"])
+        assert any(item["filename"] == "dashboard-export.json" for item in exports_payload["items"])
 
     def test_research_dashboards_command_supports_owner_and_missing_asset_filters(self, tmp_path, monkeypatch):
         """Research dashboards should filter by owner, disease area, and missing assets."""

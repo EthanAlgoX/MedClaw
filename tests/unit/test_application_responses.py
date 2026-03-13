@@ -11,6 +11,8 @@ from medclaw.application.responses import (
     build_collection_list_response,
     build_collection_response,
     build_config_response,
+    build_export_list_response,
+    build_export_summary,
     build_provider_response,
     build_provider_summary,
     build_research_run_list_response,
@@ -319,6 +321,7 @@ class TestApplicationResponses:
             reports_path="/tmp/workspace/reports",
             research_path="/tmp/workspace/research",
             collections_path="/tmp/workspace/research/collections",
+            exports_path="/tmp/workspace/research/exports",
         )
         provider = build_provider_summary(
             name="openrouter",
@@ -342,3 +345,23 @@ class TestApplicationResponses:
         assert config.model_dump(mode="json")["item"]["default_provider"] == "openrouter"
         assert provider_response.model_dump(mode="json")["item"]["name"] == "openrouter"
         assert workspace_response.model_dump(mode="json")["item"]["path"] == "/tmp/workspace"
+        assert workspace_response.model_dump(mode="json")["item"]["exports_path"] == "/tmp/workspace/research/exports"
+
+    def test_build_export_list_response(self):
+        record = build_export_summary(
+            {
+                "id": "dashboard-inventory-abc123",
+                "path": "/tmp/workspace/research/exports/dashboard.md",
+                "filename": "dashboard.md",
+                "format": "md",
+                "export_kind": "collection_dashboard_inventory",
+                "artifact_id": "dashboard-inventory-abc123",
+                "generated_at": "2026-03-08T09:00:00+00:00",
+                "size_bytes": 512,
+            }
+        )
+
+        response = build_export_list_response([record], query="dashboard", kind="md", latest=False)
+
+        assert response.model_dump(mode="json")["items"][0]["artifact_id"] == "dashboard-inventory-abc123"
+        assert response.model_dump(mode="json")["query"] == "dashboard"

@@ -22,6 +22,7 @@ from medclaw.application import (
     build_collection_dashboard_response,
     build_collection_response,
     build_config_response,
+    build_export_summary,
     build_provider_summary,
     build_research_report_list_response,
     build_research_report_response,
@@ -53,6 +54,7 @@ from medclaw.evidence.artifacts import (
 )
 from medclaw.evidence.models import ResearchReport, ResearchRun
 from medclaw.evidence.store import EvidenceStore
+from medclaw.application.query_models import ExportSummary
 from medclaw.providers.deepseek import DeepSeekProvider
 from medclaw.providers.openrouter import OpenRouterProvider
 
@@ -130,7 +132,15 @@ def build_workspace_summary_model():
         reports_path=str(workspace / "reports"),
         research_path=str(workspace / "research"),
         collections_path=str(workspace / "research" / "collections"),
+        exports_path=str(workspace / "research" / "exports"),
     )
+
+
+def get_research_exports_dir() -> Path:
+    """Return the workspace-scoped export directory for research views."""
+    workspace = get_workspace_path()
+    ensure_workspace(workspace)
+    return workspace / "research" / "exports"
 
 
 def build_provider_summaries(config) -> list:
@@ -339,6 +349,14 @@ def save_text(text: str, path: str | Path) -> Path:
     return target_path
 
 
+def resolve_export_path(path: str | Path) -> Path:
+    """Resolve relative export paths under the workspace export directory."""
+    target_path = Path(path).expanduser()
+    if target_path.is_absolute():
+        return target_path
+    return get_research_exports_dir() / target_path
+
+
 def _yaml_frontmatter_lines(value: Any, *, indent: int = 0) -> list[str]:
     """Render a small YAML-compatible frontmatter payload."""
     prefix = " " * indent
@@ -383,6 +401,107 @@ def build_dashboard_export_artifact_id(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
     return f"dashboard-inventory-{digest[:12]}"
+
+
+def _parse_markdown_frontmatter(path: Path) -> dict[str, str]:
+    """Parse shallow frontmatter keys from markdown exports."""
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return {}
+    metadata: dict[str, str] = {}
+    for line in text.splitlines()[1:]:
+        if line == "---":
+            break
+        if not line or line.startswith(" ") or ":" not in line:
+            continue
+        key, raw_value = line.split(":", 1)
+        value = raw_value.strip()
+        if value.startswith('"') and value.endswith('"'):
+            try:
+                metadata[key] = json.loads(value)
+            except json.JSONDecodeError:
+                metadata[key] = value.strip('"')
+        else:
+            metadata[key] = value
+    return metadata
+
+
+def _infer_export_kind(path: Path) -> str:
+    """Infer export kind from content or extension."""
+    if path.suffix == ".md":
+        return _parse_markdown_frontmatter(path).get("kind", "markdown_export")
+    if path.suffix == ".json":
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return "json_export"
+        if isinstance(payload, dict) and {"items", "summary", "filters"} <= payload.keys():
+            return "collection_dashboard_inventory"
+        return "json_export"
+    return "export"
+
+
+def _export_artifact_id(path: Path) -> str:
+    """Resolve a stable export id from frontmatter or filename."""
+    if path.suffix == ".md":
+        artifact_id = _parse_markdown_frontmatter(path).get("artifact_id")
+        if artifact_id:
+            return artifact_id
+    return path.stem
+
+
+def _export_generated_at(path: Path) -> str:
+    """Resolve export generation time from content or filesystem metadata."""
+    if path.suffix == ".md":
+        generated_at = _parse_markdown_frontmatter(path).get("generated_at")
+        if generated_at:
+            return generated_at
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+
+
+def list_export_summaries(
+    *,
+    query: str | None = None,
+    kind: str | None = None,
+    latest: bool = False,
+    limit: int = 20,
+) -> list[ExportSummary]:
+    """List exports saved under the workspace export directory."""
+    exports_dir = get_research_exports_dir()
+    lowered = query.lower().strip() if query else ""
+    normalized_kind = kind.strip().lower() if kind else ""
+    items: list[ExportSummary] = []
+    for path in sorted(exports_dir.glob("*"), key=lambda item: item.stat().st_mtime, reverse=True):
+        if not path.is_file():
+            continue
+        export_kind = _infer_export_kind(path)
+        export_format = path.suffix.lstrip(".") or "file"
+        if normalized_kind and normalized_kind not in {export_kind.lower(), export_format.lower()}:
+            continue
+        artifact_id = _export_artifact_id(path)
+        if lowered:
+            haystack = " ".join([path.name, export_kind, artifact_id]).lower()
+            if lowered not in haystack:
+                continue
+        items.append(
+            build_export_summary(
+                {
+                    "id": artifact_id,
+                    "path": str(path),
+                    "filename": path.name,
+                    "format": export_format,
+                    "export_kind": export_kind,
+                    "artifact_id": artifact_id,
+                    "generated_at": _export_generated_at(path),
+                    "size_bytes": path.stat().st_size,
+                }
+            )
+        )
+        if latest:
+            return items[:1]
+        if len(items) >= limit:
+            break
+    return items
 
 
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
