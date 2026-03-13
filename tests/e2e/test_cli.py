@@ -1008,6 +1008,12 @@ class TestCLI:
         assert export_payload["filters"]["top"] == 1
 
         export_markdown = export_md_path.read_text(encoding="utf-8")
+        assert export_markdown.startswith("---\n")
+        assert 'kind: "collection_dashboard_inventory"' in export_markdown
+        assert 'group_by: "owner"' in export_markdown
+        assert "filters:" in export_markdown
+        assert 'top: 1' in export_markdown
+        assert "summary:" in export_markdown
         assert "# Collection Dashboard Inventory" in export_markdown
         assert "## Groups" in export_markdown
         assert "## Translational Team" in export_markdown

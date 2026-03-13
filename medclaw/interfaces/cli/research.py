@@ -699,6 +699,7 @@ def research_dashboards(
             summary_only=summary_only,
             group_by=normalized_group_by,
             summary=response.summary,
+            filters=filters,
         )
         saved_md_path = save_text(markdown, export_md_path)
         if not as_json:

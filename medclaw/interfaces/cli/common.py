@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,7 @@ from medclaw.evidence.api_models import (
     ArtifactRecord,
     CollectionDashboard,
     CollectionDashboardAggregateSummary,
+    CollectionDashboardQueryFilters,
     CollectionBundleArtifactRecord,
     CollectionRecord,
     ResearchRunRecord,
@@ -336,6 +338,30 @@ def save_text(text: str, path: str | Path) -> Path:
     return target_path
 
 
+def _yaml_frontmatter_lines(value: Any, *, indent: int = 0) -> list[str]:
+    """Render a small YAML-compatible frontmatter payload."""
+    prefix = " " * indent
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key, item in value.items():
+            if isinstance(item, (dict, list)):
+                lines.append(f"{prefix}{key}:")
+                lines.extend(_yaml_frontmatter_lines(item, indent=indent + 2))
+            else:
+                lines.append(f"{prefix}{key}: {json.dumps(item, ensure_ascii=False)}")
+        return lines
+    if isinstance(value, list):
+        lines = []
+        for item in value:
+            if isinstance(item, (dict, list)):
+                lines.append(f"{prefix}-")
+                lines.extend(_yaml_frontmatter_lines(item, indent=indent + 2))
+            else:
+                lines.append(f"{prefix}- {json.dumps(item, ensure_ascii=False)}")
+        return lines
+    return [f"{prefix}{json.dumps(value, ensure_ascii=False)}"]
+
+
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
     """Render a single artifact record into user-facing output."""
     if isinstance(record, CollectionBundleArtifactRecord):
@@ -608,9 +634,26 @@ def render_collection_dashboard_list_markdown(
     summary_only: bool = False,
     group_by: str | None = None,
     summary: CollectionDashboardAggregateSummary | None = None,
+    filters: CollectionDashboardQueryFilters | None = None,
 ) -> str:
     """Render a markdown export for the collection dashboard list view."""
-    lines: list[str] = ["# Collection Dashboard Inventory", ""]
+    frontmatter_payload = {
+        "kind": "collection_dashboard_inventory",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "sort_by": sort_by,
+        "group_by": group_by,
+        "summary_only": summary_only,
+        "filters": filters.model_dump(mode="json") if filters is not None else None,
+        "summary": summary.model_dump(mode="json") if summary is not None else None,
+    }
+    lines: list[str] = [
+        "---",
+        *_yaml_frontmatter_lines(frontmatter_payload),
+        "---",
+        "",
+        "# Collection Dashboard Inventory",
+        "",
+    ]
     lines.append(f"- Sort by: `{sort_by}`")
     if summary_only:
         lines.append("- View: summary")
