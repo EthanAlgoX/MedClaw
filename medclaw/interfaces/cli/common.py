@@ -565,6 +565,15 @@ def emit_export(
     console.print(str(payload))
 
 
+def delete_export(record: ExportSummary) -> Path:
+    """Delete one saved research export."""
+    path = Path(record.path)
+    if not path.exists():
+        raise FileNotFoundError(f"Export file '{path}' no longer exists")
+    path.unlink()
+    return path
+
+
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
     """Render a single artifact record into user-facing output."""
     if isinstance(record, CollectionBundleArtifactRecord):

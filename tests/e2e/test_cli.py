@@ -1,6 +1,7 @@
 """E2E tests for CLI commands."""
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -1085,6 +1086,73 @@ class TestCLI:
         export_latest_payload = json.loads(export_latest_json_result.stdout)
         assert export_latest_payload["record"]["filename"] == "dashboard-export.json"
         assert export_latest_payload["payload"]["summary"]["grouped_by"] == "owner"
+
+    def test_research_export_delete_and_prune_commands(self, tmp_path, monkeypatch):
+        """Research export registry should support delete and prune operations."""
+        test_home = tmp_path / "test_home"
+        test_home.mkdir()
+        monkeypatch.setenv("HOME", str(test_home))
+
+        exports_dir = test_home / ".medclaw" / "workspace" / "research" / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+
+        markdown_export = exports_dir / "dashboard-export.md"
+        old_json_export = exports_dir / "old-export.json"
+        latest_json_export = exports_dir / "latest-export.json"
+
+        markdown_export.write_text(
+            "---\n"
+            'kind: "collection_dashboard_inventory"\n'
+            'artifact_id: "dashboard-inventory-delete"\n'
+            'generated_at: "2026-03-08T09:00:00+00:00"\n'
+            "---\n\n"
+            "# Dashboard Export\n",
+            encoding="utf-8",
+        )
+        old_json_export.write_text(json.dumps({"name": "old"}), encoding="utf-8")
+        latest_json_export.write_text(json.dumps({"name": "latest"}), encoding="utf-8")
+
+        os.utime(old_json_export, (1_700_000_000, 1_700_000_000))
+        os.utime(latest_json_export, (1_800_000_000, 1_800_000_000))
+
+        delete_result = subprocess.run(
+            ["medclaw", "research", "export-delete", "dashboard-export.md", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        prune_dry_run_result = subprocess.run(
+            ["medclaw", "research", "export-prune", "--kind", "json", "--keep", "1", "--dry-run", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert delete_result.returncode == 0
+        delete_payload = json.loads(delete_result.stdout)
+        assert delete_payload["record"]["filename"] == "dashboard-export.md"
+        assert delete_payload["payload"]["deleted"] is True
+        assert not markdown_export.exists()
+
+        assert prune_dry_run_result.returncode == 0
+        prune_dry_run_payload = json.loads(prune_dry_run_result.stdout)
+        assert prune_dry_run_payload["total"] == 1
+        assert prune_dry_run_payload["items"][0]["filename"] == "old-export.json"
+        assert old_json_export.exists()
+
+        prune_result = subprocess.run(
+            ["medclaw", "research", "export-prune", "--kind", "json", "--keep", "1", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert prune_result.returncode == 0
+        prune_payload = json.loads(prune_result.stdout)
+        assert prune_payload["total"] == 1
+        assert prune_payload["items"][0]["filename"] == "old-export.json"
+        assert not old_json_export.exists()
+        assert latest_json_export.exists()
 
     def test_research_dashboards_command_supports_owner_and_missing_asset_filters(self, tmp_path, monkeypatch):
         """Research dashboards should filter by owner, disease area, and missing assets."""

@@ -19,6 +19,7 @@ from medclaw.application import (
     build_collection_list_response,
     build_collection_response,
     build_export_list_response,
+    build_export_response,
     build_research_run_list_response,
     build_research_run_query_filters,
     build_research_run_response,
@@ -57,6 +58,7 @@ from medclaw.interfaces.cli.common import (
     read_show_artifact,
     resolve_export_path,
     run_research_workflow_report,
+    delete_export,
     save_json,
     save_text,
     write_json,
@@ -796,6 +798,70 @@ def research_export_latest(
         raise typer.Exit(1)
 
     emit_export(records[0], target=records[0].artifact_id or records[0].filename, as_json=as_json, save_path=save_path)
+
+
+@research_app.command("export-delete")
+def research_export_delete(
+    target: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Delete one saved research export by id, filename, or path."""
+    try:
+        record = get_export_summary(target)
+        delete_export(record)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if as_json:
+        write_json(
+            build_export_response(
+                target=target,
+                path=record.path,
+                record=record,
+                payload={"deleted": True},
+            )
+        )
+        return
+
+    console.print(f"[green]Deleted export:[/green] {record.path}")
+
+
+@research_app.command("export-prune")
+def research_export_prune(
+    search: str | None = typer.Option(None, "--search", help="Filter exports by text."),
+    kind: str | None = typer.Option(None, "--kind", help="Filter by export kind or file format."),
+    keep: int = typer.Option(10, "--keep", min=0, help="Keep the newest N matching exports."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be deleted without deleting."),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+):
+    """Delete older research exports while keeping the newest matching entries."""
+    records = list_export_summaries(query=search, kind=kind, latest=False, limit=10_000)
+    deleted_records = records[keep:]
+
+    if not dry_run:
+        try:
+            for record in deleted_records:
+                delete_export(record)
+        except FileNotFoundError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    if as_json:
+        write_json(build_export_list_response(deleted_records, query=search, kind=kind, latest=False))
+        return
+
+    if not deleted_records:
+        if dry_run:
+            console.print("[yellow]No research exports would be pruned.[/yellow]")
+        else:
+            console.print("[yellow]No research exports matched the prune criteria.[/yellow]")
+        return
+
+    action = "Would prune" if dry_run else "Pruned"
+    console.print(f"[bold]{action} {len(deleted_records)} research exports:[/bold]")
+    for record in deleted_records:
+        console.print(f"  - {record.filename} ({record.path})")
 
 
 @research_app.command("runs")
