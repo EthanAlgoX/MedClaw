@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -362,6 +363,28 @@ def _yaml_frontmatter_lines(value: Any, *, indent: int = 0) -> list[str]:
     return [f"{prefix}{json.dumps(value, ensure_ascii=False)}"]
 
 
+def build_dashboard_export_artifact_id(
+    dashboards: list[CollectionDashboard],
+    *,
+    sort_by: str,
+    summary_only: bool,
+    group_by: str | None,
+    filters: CollectionDashboardQueryFilters | None,
+) -> str:
+    """Build a deterministic export id for dashboard markdown artifacts."""
+    payload = {
+        "collections": [dashboard.collection.slug for dashboard in dashboards],
+        "sort_by": sort_by,
+        "summary_only": summary_only,
+        "group_by": group_by,
+        "filters": filters.model_dump(mode="json") if filters is not None else None,
+    }
+    digest = hashlib.sha1(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    return f"dashboard-inventory-{digest[:12]}"
+
+
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
     """Render a single artifact record into user-facing output."""
     if isinstance(record, CollectionBundleArtifactRecord):
@@ -635,11 +658,21 @@ def render_collection_dashboard_list_markdown(
     group_by: str | None = None,
     summary: CollectionDashboardAggregateSummary | None = None,
     filters: CollectionDashboardQueryFilters | None = None,
+    workspace_path: str | None = None,
 ) -> str:
     """Render a markdown export for the collection dashboard list view."""
     frontmatter_payload = {
         "kind": "collection_dashboard_inventory",
+        "artifact_id": build_dashboard_export_artifact_id(
+            dashboards,
+            sort_by=sort_by,
+            summary_only=summary_only,
+            group_by=group_by,
+            filters=filters,
+        ),
+        "export_version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "workspace_path": workspace_path,
         "sort_by": sort_by,
         "group_by": group_by,
         "summary_only": summary_only,

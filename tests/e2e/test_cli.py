@@ -1010,6 +1010,9 @@ class TestCLI:
         export_markdown = export_md_path.read_text(encoding="utf-8")
         assert export_markdown.startswith("---\n")
         assert 'kind: "collection_dashboard_inventory"' in export_markdown
+        assert 'artifact_id: "dashboard-inventory-' in export_markdown
+        assert 'export_version: 1' in export_markdown
+        assert 'workspace_path: ' in export_markdown
         assert 'group_by: "owner"' in export_markdown
         assert "filters:" in export_markdown
         assert 'top: 1' in export_markdown
