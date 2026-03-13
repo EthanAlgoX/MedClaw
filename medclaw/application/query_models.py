@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -121,3 +123,12 @@ class ExportListResponse(BaseModel):
     query: str | None = None
     kind: str | None = None
     latest: bool = False
+
+
+class ExportResponse(BaseModel):
+    """Typed single-export response."""
+
+    target: str
+    path: str
+    record: ExportSummary
+    payload: Any

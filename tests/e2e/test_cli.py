@@ -1039,6 +1039,35 @@ class TestCLI:
         assert any(item["filename"] == "dashboard-export.md" for item in exports_payload["items"])
         assert any(item["filename"] == "dashboard-export.json" for item in exports_payload["items"])
 
+        export_show_path_result = subprocess.run(
+            ["medclaw", "research", "export-show", "dashboard-export.md", "--save-path"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        export_show_markdown_result = subprocess.run(
+            ["medclaw", "research", "export-show", "dashboard-export.md"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        export_show_json_result = subprocess.run(
+            ["medclaw", "research", "export-show", "dashboard-export.json", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        assert export_show_path_result.returncode == 0
+        assert export_show_path_result.stdout.strip() == str(resolved_export_md_path)
+        assert export_show_markdown_result.returncode == 0
+        assert "Collection Dashboard Inventory" in export_show_markdown_result.stdout
+        assert "Dormant Program" in export_show_markdown_result.stdout
+        assert export_show_json_result.returncode == 0
+        export_show_payload = json.loads(export_show_json_result.stdout)
+        assert export_show_payload["record"]["filename"] == "dashboard-export.json"
+        assert export_show_payload["payload"]["summary"]["grouped_by"] == "owner"
+
     def test_research_dashboards_command_supports_owner_and_missing_asset_filters(self, tmp_path, monkeypatch):
         """Research dashboards should filter by owner, disease area, and missing assets."""
         test_home = tmp_path / "test_home"

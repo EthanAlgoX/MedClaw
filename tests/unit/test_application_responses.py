@@ -12,6 +12,7 @@ from medclaw.application.responses import (
     build_collection_response,
     build_config_response,
     build_export_list_response,
+    build_export_response,
     build_export_summary,
     build_provider_response,
     build_provider_summary,
@@ -365,3 +366,27 @@ class TestApplicationResponses:
 
         assert response.model_dump(mode="json")["items"][0]["artifact_id"] == "dashboard-inventory-abc123"
         assert response.model_dump(mode="json")["query"] == "dashboard"
+
+    def test_build_export_response(self):
+        record = build_export_summary(
+            {
+                "id": "dashboard-inventory-abc123",
+                "path": "/tmp/workspace/research/exports/dashboard.md",
+                "filename": "dashboard.md",
+                "format": "md",
+                "export_kind": "collection_dashboard_inventory",
+                "artifact_id": "dashboard-inventory-abc123",
+                "generated_at": "2026-03-08T09:00:00+00:00",
+                "size_bytes": 512,
+            }
+        )
+
+        response = build_export_response(
+            target="dashboard.md",
+            path=record.path,
+            record=record,
+            payload="# Collection Dashboard Inventory\n",
+        )
+
+        assert response.model_dump(mode="json")["record"]["filename"] == "dashboard.md"
+        assert response.model_dump(mode="json")["target"] == "dashboard.md"

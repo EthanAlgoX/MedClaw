@@ -6,6 +6,7 @@ from medclaw.application.query_models import (
     ConfigResponse,
     ConfigSummary,
     ExportListResponse,
+    ExportResponse,
     ExportSummary,
     ProviderListResponse,
     ProviderResponse,
@@ -454,3 +455,19 @@ def build_export_list_response(
 ) -> ExportListResponse:
     """Build a typed export listing response."""
     return ExportListResponse(items=records, total=len(records), query=query, kind=kind, latest=latest)
+
+
+def build_export_response(
+    *,
+    target: str,
+    path: str,
+    record: ExportSummary,
+    payload,
+) -> ExportResponse:
+    """Build a typed single-export response."""
+    return ExportResponse(
+        target=target,
+        path=path,
+        record=record,
+        payload=payload,
+    )

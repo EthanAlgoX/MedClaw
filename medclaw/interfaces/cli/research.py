@@ -19,6 +19,7 @@ from medclaw.application import (
     build_collection_list_response,
     build_collection_response,
     build_export_list_response,
+    build_export_response,
     build_research_run_list_response,
     build_research_run_query_filters,
     build_research_run_response,
@@ -47,12 +48,14 @@ from medclaw.interfaces.cli.common import (
     emit_research_reports,
     get_configured_provider,
     get_evidence_store,
+    get_export_summary,
     get_research_exports_dir,
     get_research_use_cases,
     list_export_summaries,
     normalize_artifact_option,
     render_collection_dashboard_list_markdown,
     read_show_artifact,
+    read_export_payload,
     resolve_export_path,
     run_research_workflow_report,
     save_json,
@@ -762,6 +765,45 @@ def research_exports(
         )
         console.print(f"      artifact_id: {record.artifact_id}")
         console.print(f"      path: {record.path}")
+
+
+@research_app.command("export-show")
+def research_export_show(
+    target: str,
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only the resolved export path."),
+):
+    """Show one saved research export by id, filename, or path."""
+    try:
+        record = get_export_summary(target)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if save_path:
+        write_lines([record.path])
+        return
+
+    payload = read_export_payload(record)
+
+    if as_json:
+        write_json(
+            build_export_response(
+                target=target,
+                path=record.path,
+                record=record,
+                payload=payload,
+            )
+        )
+        return
+
+    if record.format == "md":
+        console.print(Markdown(str(payload)))
+        return
+    if record.format == "json":
+        write_json(payload)
+        return
+    console.print(str(payload))
 
 
 @research_app.command("runs")

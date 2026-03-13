@@ -504,6 +504,32 @@ def list_export_summaries(
     return items
 
 
+def get_export_summary(target: str) -> ExportSummary:
+    """Resolve one workspace export by id, filename, or path."""
+    exports_dir = get_research_exports_dir()
+    target_path = Path(target).expanduser()
+    if not target_path.is_absolute():
+        target_path = exports_dir / target_path
+    target_path = target_path.resolve()
+
+    for record in list_export_summaries(limit=10_000):
+        record_path = Path(record.path).resolve()
+        if target in {record.id, record.artifact_id, record.filename, record.path}:
+            return record
+        if target_path == record_path:
+            return record
+
+    raise FileNotFoundError(f"Export '{target}' was not found in {exports_dir}")
+
+
+def read_export_payload(record: ExportSummary) -> object:
+    """Read one export payload based on its format."""
+    path = Path(record.path)
+    if record.format == "json":
+        return json.loads(path.read_text(encoding="utf-8"))
+    return path.read_text(encoding="utf-8")
+
+
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:
     """Render a single artifact record into user-facing output."""
     if isinstance(record, CollectionBundleArtifactRecord):
