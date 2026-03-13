@@ -1057,6 +1057,18 @@ class TestCLI:
             text=True,
             timeout=10,
         )
+        export_latest_path_result = subprocess.run(
+            ["medclaw", "research", "export-latest", "--kind", "json", "--save-path"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        export_latest_json_result = subprocess.run(
+            ["medclaw", "research", "export-latest", "--kind", "json", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
 
         assert export_show_path_result.returncode == 0
         assert export_show_path_result.stdout.strip() == str(resolved_export_md_path)
@@ -1067,6 +1079,12 @@ class TestCLI:
         export_show_payload = json.loads(export_show_json_result.stdout)
         assert export_show_payload["record"]["filename"] == "dashboard-export.json"
         assert export_show_payload["payload"]["summary"]["grouped_by"] == "owner"
+        assert export_latest_path_result.returncode == 0
+        assert export_latest_path_result.stdout.strip() == str(resolved_export_path)
+        assert export_latest_json_result.returncode == 0
+        export_latest_payload = json.loads(export_latest_json_result.stdout)
+        assert export_latest_payload["record"]["filename"] == "dashboard-export.json"
+        assert export_latest_payload["payload"]["summary"]["grouped_by"] == "owner"
 
     def test_research_dashboards_command_supports_owner_and_missing_asset_filters(self, tmp_path, monkeypatch):
         """Research dashboards should filter by owner, disease area, and missing assets."""

@@ -22,6 +22,7 @@ from medclaw.application import (
     build_collection_dashboard_response,
     build_collection_response,
     build_config_response,
+    build_export_response,
     build_export_summary,
     build_provider_summary,
     build_research_report_list_response,
@@ -528,6 +529,40 @@ def read_export_payload(record: ExportSummary) -> object:
     if record.format == "json":
         return json.loads(path.read_text(encoding="utf-8"))
     return path.read_text(encoding="utf-8")
+
+
+def emit_export(
+    record: ExportSummary,
+    *,
+    target: str | None = None,
+    as_json: bool = False,
+    save_path: bool = False,
+) -> None:
+    """Render one saved research export in path, JSON, or text form."""
+    resolved_target = target or record.filename
+    if save_path:
+        write_lines([record.path])
+        return
+
+    payload = read_export_payload(record)
+    if as_json:
+        write_json(
+            build_export_response(
+                target=resolved_target,
+                path=record.path,
+                record=record,
+                payload=payload,
+            )
+        )
+        return
+
+    if record.format == "md":
+        console.print(Markdown(str(payload)))
+        return
+    if record.format == "json":
+        write_json(payload)
+        return
+    console.print(str(payload))
 
 
 def emit_artifact_record(record: ArtifactRecord, store: EvidenceStore) -> None:

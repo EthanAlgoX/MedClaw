@@ -19,7 +19,6 @@ from medclaw.application import (
     build_collection_list_response,
     build_collection_response,
     build_export_list_response,
-    build_export_response,
     build_research_run_list_response,
     build_research_run_query_filters,
     build_research_run_response,
@@ -40,6 +39,7 @@ from medclaw.interfaces.cli.common import (
     emit_collection_dashboard,
     emit_collection_dashboard_list,
     emit_collection_manifest,
+    emit_export,
     emit_research_run,
     emit_research_run_record_list,
     emit_research_timeline,
@@ -55,7 +55,6 @@ from medclaw.interfaces.cli.common import (
     normalize_artifact_option,
     render_collection_dashboard_list_markdown,
     read_show_artifact,
-    read_export_payload,
     resolve_export_path,
     run_research_workflow_report,
     save_json,
@@ -780,30 +779,23 @@ def research_export_show(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
-    if save_path:
-        write_lines([record.path])
-        return
+    emit_export(record, target=target, as_json=as_json, save_path=save_path)
 
-    payload = read_export_payload(record)
 
-    if as_json:
-        write_json(
-            build_export_response(
-                target=target,
-                path=record.path,
-                record=record,
-                payload=payload,
-            )
-        )
-        return
+@research_app.command("export-latest")
+def research_export_latest(
+    search: str | None = typer.Option(None, "--search", help="Filter exports by text."),
+    kind: str | None = typer.Option(None, "--kind", help="Filter by export kind or file format."),
+    as_json: bool = typer.Option(False, "--json", help="Output structured JSON."),
+    save_path: bool = typer.Option(False, "--save-path", help="Print only the resolved export path."),
+):
+    """Show the latest saved research export."""
+    records = list_export_summaries(query=search, kind=kind, latest=True, limit=1)
+    if not records:
+        console.print("[yellow]No research exports matched the current filters.[/yellow]")
+        raise typer.Exit(1)
 
-    if record.format == "md":
-        console.print(Markdown(str(payload)))
-        return
-    if record.format == "json":
-        write_json(payload)
-        return
-    console.print(str(payload))
+    emit_export(records[0], target=records[0].artifact_id or records[0].filename, as_json=as_json, save_path=save_path)
 
 
 @research_app.command("runs")
